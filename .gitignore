@@ -1,0 +1,11 @@
+/app/
+/distribution-sources/
+/share/
+/out/
+/reports/
+/test-diagnostics/
+/*check*.txt*
+/*test*.txt*
+*.partial
+*.user
+*.suo
