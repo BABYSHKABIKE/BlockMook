@@ -28,10 +28,11 @@ internal static class Program {
             }
             bool created;
             using(var mutex=new Mutex(true,"Local\\BlockMook-Desktop-"+System.Security.Principal.WindowsIdentity.GetCurrent().User.Value,out created)) {
-                if(!created) { MessageBox.Show("BlockMook уже открыт.","BlockMook"); return 0; }
+                if(!created) { if(!args.Contains("--startup")&&!InstanceSignal.ShowExisting())MessageBox.Show("BlockMook уже запускается. Повтори открытие через несколько секунд.","BlockMook");return 0; }
                 var app=new Application();
                 var controller=new MainWindow(args.Length==2 && args[0]=="--ui-smoke");
                 if(args.Length==2 && args[0]=="--ui-smoke") controller.SmokePath=args[1];
+                controller.StartupLaunch=args.Contains("--startup");
                 app.Run(controller.Window);
             }
             return 0;
@@ -70,10 +71,11 @@ internal sealed partial class MainWindow {
         results=Enumerable.Range(0,6).Select(i=>Find<TextBlock>("Result"+i)).ToArray();
         profiles=Enumerable.Range(0,3).Select(i=>Find<Button>("Profile"+i)).ToArray();
         SetupUi(smoke);
+        SetupDesktop();
         manualProfile=preferences.ManualProfile>=0;profile=manualProfile?preferences.ManualProfile:Core.LoadProfile(Mask); PaintProfile();
-        connect.Click+=async(s,e)=>{if(connectionCancellation!=null){connectionCancellation.Cancel();return;}await Guard(Toggle);};
+        connect.Click+=async(s,e)=>await UserToggle();
         auto.Click+=(s,e)=>{manualProfile=false;preferences.ManualProfile=-1;profile=Core.LoadProfile(Mask);PaintProfile();SavePreferences();};
-        probe.Click+=async(s,e)=>await Guard(async()=>{await Check();});
+        probe.Click+=async(s,e)=>await Guard(QuickDiagnostic);
         diagnostic.Click+=async(s,e)=>await Guard(RunDiagnostic);
         cancelDiagnostic.Click+=(s,e)=>{if(diagnosticCancellation!=null){diagnosticCancellation.Cancel();cancelDiagnostic.IsEnabled=false;diagnosticStatus.Text="Останавливаем проверку…";}};
         openReports.Click+=(s,e)=>{try{Directory.CreateDirectory(DiagnosticReport.Folder);Process.Start(new ProcessStartInfo(DiagnosticReport.Folder){UseShellExecute=true});}catch(Exception ex){diagnosticStatus.Text=ex.Message;}};
@@ -83,7 +85,8 @@ internal sealed partial class MainWindow {
         Window.SourceInitialized+=(s,e)=>{int dark=1; Native.DwmSetWindowAttribute(new WindowInteropHelper(Window).Handle,20,ref dark,4);};
         Window.Loaded+=(s,e)=> {
             try { Core.VerifyEngine(); Write("Компоненты zapret найдены и совпадают с хешами сборки."); } catch(Exception ex) { Write(ex.Message); detail.Text=ex.Message; }
-            UpdateEnvironment(); Controls();timer.Start();
+            UpdateEnvironment(); Controls();if(!isSmoke)timer.Start();
+            if(!isSmoke&&StartupLaunch&&preferences.WelcomeDone)Post(async()=>{if(preferences.CloseToTray)Window.Hide();if(preferences.AutoConnect){RestoreWindow();await UserToggle();}});
             if(!preferences.WelcomeDone && SmokePath==null)ShowWelcome();
             if(SmokePath!=null) {
                 try {
@@ -93,27 +96,19 @@ internal sealed partial class MainWindow {
                 Window.Close();
             }
         };
-        Window.Closing+=(s,e)=>{if(updateCancellation!=null){e.Cancel=true;closeAfterUpdate=true;updateCancellation.Cancel();return;}if(diagnosticCancellation!=null){e.Cancel=true;diagnosticCancellation.Cancel();diagnosticStatus.Text="Останавливаем проверку и сохраняем отчёт. После завершения окно можно закрыть.";return;}if(connectionCancellation!=null)connectionCancellation.Cancel();closing=true;timer.Stop();bridge.Dispose();};
-        timer.Tick+=async(s,e)=> {
-            if(busy || closing) return;
-            busy=true;
-            try {
-                if(running && await bridge.Send("STATUS")!="RUNNING") {running=false;state.Text="Обход остановился";detail.Text="Движок завершился. Открой журнал или повтори запуск.";Write(detail.Text);}
-                if(!running) UpdateEnvironment();
-            } catch(Exception ex) {running=false;bridge.Dispose();state.Text="Соединение с движком потеряно";detail.Text=ex.Message;Write(ex.Message);}
-            finally {busy=false;Controls();}
-        };
+        timer.Tick+=async(s,e)=>{if(!busy&&!closing&&!exitRequested)await Guard(MonitorConnection);};
     }
     private int Mask {get{return Services.Items.Where(s=>ServiceControl(s).IsChecked==true).Sum(s=>s.Bit);}}
     private void Write(string message) { if(closing)return; log.AppendText(DateTime.Now.ToString("HH:mm:ss")+"  "+message+Environment.NewLine); if(log.Text.Length>14000)log.Text=log.Text.Substring(log.Text.Length-10000);log.ScrollToEnd(); }
     private void UpdateEnvironment() { string conflict=Core.Conflict();environment.Text=conflict==null?"":"Обнаружен другой VPN или zapret. Отключи его перед подключением.";environment.ToolTip=conflict;Find<FrameworkElement>("EnvironmentBanner").Visibility=conflict==null?Visibility.Collapsed:Visibility.Visible; }
-    private void PaintProfile() { profileName.Text=(manualProfile?"Вручную · ":"Автоматически · ")+Core.Names[profile];for(int i=0;i<3;i++)profiles[i].Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile&&i==profile?"#384326":"#2B2D31"));auto.Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile?"#2B2D31":"#384326")); }
-    private void Controls() { Find<TextBlock>("ConnectionBadge").Text=connectionCancellation!=null?"ПОДКЛЮЧАЕМ":diagnosticCancellation!=null?"ДИАГНОСТИКА":running?"ДОСТУП ВКЛЮЧЁН":"НЕ ПОДКЛЮЧЕНО"; connect.IsEnabled=!busy||connectionCancellation!=null;auto.IsEnabled=!busy&&!running;probe.IsEnabled=!busy;diagnostic.IsEnabled=!busy;foreach(var service in Services.Items)ServiceControl(service).IsEnabled=!busy&&!running;Find<Button>("AddService").IsEnabled=!busy&&!running;Find<Button>("ShowWelcome").IsEnabled=!busy&&!running;foreach(var p in profiles)p.IsEnabled=!busy&&!running;connect.Content=connectionCancellation!=null?"Отменить":running?"Отключить":"Подключить";Find<System.Windows.Shapes.Ellipse>("StateDot").Fill=new SolidColorBrush((Color)ColorConverter.ConvertFromString(running?"#D6F578":busy?"#DDCAA3":"#80838A")); }
+    private void PaintProfile() { profileName.Text=(manualProfile?"Вручную · ":"Автоматически · ")+Core.Names[profile];for(int i=0;i<3;i++)profiles[i].Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile&&i==profile?"#3881D8D0":"#2281D8D0"));auto.Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile?"#2281D8D0":"#3881D8D0")); }
+    private void Controls() { PaintDesktop(); Find<TextBlock>("ConnectionBadge").Text=connectionCancellation!=null?"ПОДКЛЮЧАЕМ":diagnosticCancellation!=null?"ДИАГНОСТИКА":running?"ДОСТУП ВКЛЮЧЁН":"НЕ ПОДКЛЮЧЕНО"; connect.IsEnabled=!exitRequested&&(!busy||connectionCancellation!=null||healthChecking);auto.IsEnabled=!busy&&!running&&!recovery.Wanted;probe.IsEnabled=!busy;diagnostic.IsEnabled=!busy;foreach(var service in Services.Items)ServiceControl(service).IsEnabled=!busy&&!running&&!recovery.Wanted;Find<Button>("AddService").IsEnabled=!busy&&!running&&!recovery.Wanted;Find<Button>("ShowWelcome").IsEnabled=!busy&&!running&&!recovery.Wanted;foreach(var p in profiles)p.IsEnabled=!busy&&!running&&!recovery.Wanted;connect.Content=connectionCancellation!=null?"Отменить":running||recovery.Wanted?"Отключить":"Подключить";Find<System.Windows.Shapes.Ellipse>("StateDot").Fill=new SolidColorBrush((Color)ColorConverter.ConvertFromString(running?"#81D8D0":busy?"#C6C9CC":"#80838A")); }
     private async Task RunDiagnostic() {
+        recovery.Stop();
         if(running)await Stop();
         using(var report=new DiagnosticReport(DiagnosticReport.Folder))
-        using(var cancellation=new CancellationTokenSource(TimeSpan.FromMinutes(3))) {
-            diagnosticCancellation=cancellation;cancelDiagnostic.Visibility=Visibility.Visible;cancelDiagnostic.IsEnabled=true;
+        using(var cancellation=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token)) {
+            cancellation.CancelAfter(TimeSpan.FromMinutes(3));diagnosticCancellation=cancellation;cancelDiagnostic.Visibility=Visibility.Visible;cancelDiagnostic.IsEnabled=true;
             diagnosticStatus.Text="Отчёт сохраняется по мере проверки: "+report.PathName;
             bool startPending=false;
             try {
@@ -123,27 +118,29 @@ internal sealed partial class MainWindow {
                     async()=>{if(!bridge.Connected){if(startPending)throw new IOException("Канал потерян после команды запуска");return;}if(await bridge.Send("STOP")!="STOPPED")throw new IOException("Движок не подтвердил остановку");startPending=false;},
                     bridge.Dispose,cancellation.Token,message=>{state.Text=message;Write(message);});
                 state.Text=outcome.Status=="ЗАВЕРШЕНО"?"Диагностика завершена":outcome.Status=="ПРЕРВАНО"?"Диагностика прервана":"Диагностика не завершена";
-                detail.Text=outcome.StopConfirmed?"Подключение выключено. Результат — в разделе «Помощь».":"Остановка не подтверждена. Подробности — в отчёте.";
+                detail.Text=outcome.StopConfirmed?"Подключение выключено. Результат — в разделе «Диагностика».":"Остановка не подтверждена. Подробности — в отчёте.";
                 diagnosticStatus.Text=(outcome.Error==null?"":outcome.Error+"\n")+"Отчёт: "+report.PathName;
             } finally {bridge.Dispose();running=false;diagnosticCancellation=null;cancelDiagnostic.Visibility=Visibility.Collapsed;UpdateEnvironment();}
         }
     }
     private async Task Guard(Func<Task> action) {
-        if(busy||closing)return;busy=true;Controls();
+        if(busy||closing||exitRequested)return;busy=true;Controls();
         try {await action();}
         catch(Exception ex) {
-            if(closing)return;
+            if(closing||exitRequested)return;
             // A failed command must not leave an untracked engine running.
             bridge.Dispose();running=false;state.Text="Не удалось выполнить";
             if(ex is OperationCanceledException)state.Text="Подключение отменено";
             detail.Text=ex is OperationCanceledException?"Сетевой компонент остановлен. Можно повторить подключение.":ex is System.ComponentModel.Win32Exception && ((System.ComponentModel.Win32Exception)ex).NativeErrorCode==1223?"Запрос прав администратора отменён. Ничего не включено.":ex.Message;
             Write(detail.Text);
-        } finally {busy=false;if(!closing)Controls();}
+        } finally {busy=false;if(!closing)Controls();Post(TryCompleteExit);}
+        if(userStopRequested&&!exitRequested){userStopRequested=false;await Guard(Stop);}
     }
     private void EnsureClear() { string conflict=Core.Conflict();if(conflict!=null)throw new InvalidOperationException(conflict);Core.Domains(Mask);Core.VerifyEngine(); }
     private async Task Start() {
+        if(recovering&&!bridge.Connected)throw new IOException("Нужно повторное подтверждение прав. Подключись вручную.");
         EnsureClear();state.Text="Подключаем…";detail.Text="Подтверди запрос прав в окне Windows.";
-        await bridge.Connect();if(closing){bridge.Dispose();return;}
+        await bridge.Connect();lifetime.Token.ThrowIfCancellationRequested();if(connectionCancellation!=null)connectionCancellation.Token.ThrowIfCancellationRequested();
         if(await bridge.Send("START|"+profile+"|"+Mask)!="RUNNING")throw new IOException("Движок не подтвердил запуск");
         running=true;state.Text="Проверяем доступ…";detail.Text="Подбираем рабочий способ подключения.";
         Find<FrameworkElement>("EnvironmentBanner").Visibility=Visibility.Collapsed;Write("Запущен профиль «"+Core.Names[profile]+"».");
@@ -156,10 +153,11 @@ internal sealed partial class MainWindow {
         foreach(var block in results){block.Text="Проверяем…";block.Foreground=Brushes.LightGray;}
         string conflict=running?null:Core.Conflict();
         probeTime.Text="Проверяем · до 10 секунд";
-        var values=await Probes.All(Mask,connectionCancellation==null?CancellationToken.None:connectionCancellation.Token);
+        var values=await Probes.All(Mask,connectionCancellation!=null?connectionCancellation.Token:quickCancellation!=null?quickCancellation.Token:lifetime.Token);
         if(closing)return values;
-        foreach(var value in values){results[value.Index].Text=value.Ok?(value.Index>=3?"TLS: доступен":"Доступен"):"Не подтверждён";results[value.Index].Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(value.Ok?"#D6F578":"#DDCAA3"));results[value.Index].ToolTip=value.Detail+"\n"+String.Join("\n",value.Checks);Write(Services.ProbeName(value.Index)+": "+value.Detail);foreach(string check in value.Checks)Write(check);}
+        foreach(var value in values){results[value.Index].Text=value.Ok?(value.Index>=3?"TLS: доступен":"Доступен"):"Не подтверждён";results[value.Index].Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(value.Ok?"#81D8D0":"#C6C9CC"));results[value.Index].ToolTip=value.Detail+"\n"+String.Join("\n",value.Checks);Write(Services.ProbeName(value.Index)+": "+value.Detail);foreach(string check in value.Checks)Write(check);}
         Find<TextBlock>("ProbeDetails").Text=String.Join("\n\n",values.Select(v=>Services.ProbeName(v.Index)+" · "+v.Detail+"\n"+String.Join("\n",v.Checks)));
+        PaintDiagnostic(values,conflict!=null);
         probeTime.Text="Проверено в "+DateTime.Now.ToString("HH:mm")+(conflict!=null?" · другой VPN активен":"");
         if(running){detail.Text=Probes.AllSelected(values,Mask)?"Проверки выбранных сервисов прошли. Теперь можно открыть приложения; видео и голос требуют отдельной проверки.":"Часть проверок не прошла. Причина и результаты компонентов доступны в журнале.";}
         return values;
@@ -167,14 +165,16 @@ internal sealed partial class MainWindow {
     private async Task ConnectAutomatically() {
         EnsureClear();
         using(var report=new DiagnosticReport(DiagnosticReport.Folder,true))
-        using(var cancellation=new CancellationTokenSource(TimeSpan.FromMinutes(3))) {
-            connectionCancellation=cancellation;Controls();diagnosticStatus.Text="Отчёт подключения: "+report.PathName;
+        using(var cancellation=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token)) {
+            cancellation.CancelAfter(TimeSpan.FromMinutes(3));connectionCancellation=cancellation;Controls();diagnosticStatus.Text="Отчёт подключения: "+report.PathName;
             try {
                 var outcome=await ConnectionFlow.Run(profile,Mask,manualProfile,
                     async chosen=>{profile=chosen;PaintProfile();await Start();},Stop,bridge.Dispose,
                     async()=>{var values=await Check();if(!bridge.Connected||await bridge.Send("STATUS")!="RUNNING")throw new IOException("Движок завершился во время проверки");return values;},
                     message=>{report.Add(message);Write(message);},(chosen,values)=>report.Sample(Core.Names[chosen],values,Mask),cancellation.Token);
                 running=outcome.Running;
+                lastProvenMask=outcome.Results==null?0:Services.Selected(Mask).Where(service=>outcome.Results.Any(r=>r.Index==service.Index&&r.Ok)).Sum(service=>service.Bit);
+                lastConnectionHealthy=outcome.Results!=null&&(recovering?Probes.AllSelected(outcome.Results,recovery.ProvenMask):outcome.Verified);
                 if(!running){state.Text="Доступ не подтверждён";detail.Text="Проверенные стратегии не дали подтверждённого доступа. Обход выключен; отчёт сохранён.";}
                 else{
                     state.Text=outcome.Verified?"Подключено":"Доступ частичный";

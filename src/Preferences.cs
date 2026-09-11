@@ -6,6 +6,8 @@ internal sealed class Preferences {
     internal int Services=3;
     internal int ManualProfile=-1;
     internal bool WelcomeDone,ReduceMotion;
+    internal bool CloseToTray=true,AutoRecover=true,ReconnectOnChange=true,Notifications=true;
+    internal bool AutoConnect,TrayExplained;
     internal static string DefaultPath {get{return Path.Combine(Core.DataRoot,"interface-v1.txt");}}
     internal static Preferences LoadUser() {
         return Load(File.Exists(DefaultPath)?DefaultPath:Path.Combine(Core.LegacyDataRoot,"interface-v1.txt"));
@@ -19,6 +21,12 @@ internal sealed class Preferences {
             if(pair[0]=="profile"&&Int32.TryParse(pair[1],out mask)&&mask>=-1&&mask<Core.Names.Length)value.ManualProfile=mask;
             if(pair[0]=="welcome"&&Boolean.TryParse(pair[1],out flag))value.WelcomeDone=flag;
             if(pair[0]=="reduceMotion"&&Boolean.TryParse(pair[1],out flag))value.ReduceMotion=flag;
+            if(pair[0]=="closeToTray"&&Boolean.TryParse(pair[1],out flag))value.CloseToTray=flag;
+            if(pair[0]=="autoRecover"&&Boolean.TryParse(pair[1],out flag))value.AutoRecover=flag;
+            if(pair[0]=="reconnectOnChange"&&Boolean.TryParse(pair[1],out flag))value.ReconnectOnChange=flag;
+            if(pair[0]=="notifications"&&Boolean.TryParse(pair[1],out flag))value.Notifications=flag;
+            if(pair[0]=="autoConnect"&&Boolean.TryParse(pair[1],out flag))value.AutoConnect=flag;
+            if(pair[0]=="trayExplained"&&Boolean.TryParse(pair[1],out flag))value.TrayExplained=flag;
         }
         return value;
     }
@@ -29,7 +37,7 @@ internal sealed class Preferences {
         Core.Domains(Services);
         Directory.CreateDirectory(Path.GetDirectoryName(path));
         string temporary=path+".tmp";
-        File.WriteAllText(temporary,"services="+Services+"\nwelcome="+WelcomeDone+"\nreduceMotion="+ReduceMotion+"\nprofile="+ManualProfile+"\n");
+        File.WriteAllText(temporary,"services="+Services+"\nwelcome="+WelcomeDone+"\nreduceMotion="+ReduceMotion+"\nprofile="+ManualProfile+"\ncloseToTray="+CloseToTray+"\nautoRecover="+AutoRecover+"\nreconnectOnChange="+ReconnectOnChange+"\nnotifications="+Notifications+"\nautoConnect="+AutoConnect+"\ntrayExplained="+TrayExplained+"\n");
         if(File.Exists(path))File.Replace(temporary,path,null);else File.Move(temporary,path);
     }
 }

@@ -17,6 +17,7 @@ internal sealed class Engine : IDisposable {
     private string error = "";
     private readonly object gate = new object();
     internal bool Alive { get { return process != null && !process.HasExited; } }
+    internal int OwnedPid {get{return Alive?process.Id:0;}}
     internal async Task Start(int profile, int mask) {
         Dispose();
         var conflict = Core.Conflict();
@@ -99,6 +100,7 @@ internal static class Worker {
                         try {
                             if (command=="STOP") { engine.Dispose(); await writer.WriteLineAsync("STOPPED"); }
                             else if (command=="STATUS") await writer.WriteLineAsync(engine.Alive ? "RUNNING" : "STOPPED");
+                            else if (command=="CONFLICT") await writer.WriteLineAsync(Core.Conflict(engine.OwnedPid)??"CLEAR");
                             else {
                                 var parts=command.Split('|'); int profile,mask;
                                 if (parts.Length!=3 || parts[0]!="START" || !Int32.TryParse(parts[1],out profile) || !Int32.TryParse(parts[2],out mask) || profile<0 || profile>2 || !Services.ValidMask(mask)) throw new ArgumentException("Недопустимая команда");

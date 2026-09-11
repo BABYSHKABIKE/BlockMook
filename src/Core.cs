@@ -56,11 +56,12 @@ internal static class Core {
             }
         }
     }
-    internal static string Conflict() {
+    internal static string Conflict() {return Conflict(0);}
+    internal static string Conflict(int ownedWinwsPid) {
         // Never terminate a process owned by another application.
         foreach (string name in new[] { "winws", "winws2", "nfqws", "goodbyedpi", "sing-box", "xray", "v2ray" }) {
             var processes = Process.GetProcessesByName(name);
-            bool found = processes.Length > 0;
+            bool found = processes.Any(p=>p.Id!=ownedWinwsPid);
             foreach (var p in processes) p.Dispose();
             if (found) return "Уже работает " + name + ". Отключи его в своей программе, затем повтори запуск.";
         }

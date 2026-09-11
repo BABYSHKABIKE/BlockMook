@@ -12,10 +12,11 @@ internal sealed partial class MainWindow {
     private Preferences preferences;
     private bool isSmoke;
     private int welcomeStep;
-    private readonly string[] pageNames={"Home","Updates","Settings","Help"};
+    private readonly string[] pageNames={"Home","Diagnostics","Updates","Settings","Help"};
     private void SetupUi(bool smoke) {
         isSmoke=smoke;preferences=smoke?new Preferences():Preferences.LoadUser();
         SetupUpdates();
+        SetupDiagnostics();
         youtube.IsChecked=(preferences.Services&1)!=0;discord.IsChecked=(preferences.Services&2)!=0;
         SetupCatalog();
         Find<CheckBox>("ReduceMotion").IsChecked=preferences.ReduceMotion;
@@ -44,8 +45,8 @@ internal sealed partial class MainWindow {
         foreach(string page in pageNames) {
             var view=Find<FrameworkElement>(page+"Page");view.BeginAnimation(UIElement.OpacityProperty,null);
             view.Visibility=page==name?Visibility.Visible:Visibility.Collapsed;
-            Find<Button>("Nav"+page).Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(page==name?"#292F21":"#141517"));
-            Find<Button>("Nav"+page).Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(page==name?"#D6F578":"#95989E"));
+            Find<Button>("Nav"+page).Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(page==name?"#2881D8D0":"#0C0D0F"));
+            Find<Button>("Nav"+page).Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(page==name?"#81D8D0":"#95989E"));
             if(page==name&&!preferences.ReduceMotion&&!isSmoke)view.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(0,1,TimeSpan.FromMilliseconds(140)));
         }
     }
@@ -55,7 +56,7 @@ internal sealed partial class MainWindow {
     private void PaintWelcome() {
         Find<TextBlock>("WelcomeProgress").Text="0"+(welcomeStep+1)+" / 03";
         Find<TextBlock>("WelcomeTitle").Text=new[]{"Привет, это BlockMook.","Твои сервисы. Твой выбор.","Всё готово к старту."}[welcomeStep];
-        Find<TextBlock>("WelcomeText").Text=new[]{"YouTube, Discord и дополнительные сервисы из каталога. BlockMook подбирает способ подключения и проверяет соединения.","Выбери нужные сервисы. Другие сервисы, включая Google Meet, добавляются через «Добавить сервис» на главном экране.","Отключи другой VPN или zapret, затем нажми «Подключить». Windows запросит права администратора. Закрытие окна отключит BlockMook."}[welcomeStep];
+        Find<TextBlock>("WelcomeText").Text=new[]{"YouTube, Discord и дополнительные сервисы из каталога. BlockMook подбирает способ подключения и проверяет соединения.","Выбери нужные сервисы. Другие сервисы, включая Google Meet, добавляются через «Добавить сервис» на главном экране.","Отключи другой VPN или zapret, затем нажми «Подключить». Windows запросит права администратора. Крестик скрывает окно в трей. Для полного отключения выбери «Выйти» в меню значка."}[welcomeStep];
         Find<FrameworkElement>("WelcomeServices").Visibility=welcomeStep==1?Visibility.Visible:Visibility.Collapsed;
         Find<Button>("WelcomeBack").Visibility=welcomeStep==0?Visibility.Hidden:Visibility.Visible;
         Find<Button>("WelcomeNext").Content=welcomeStep==2?"Начать":"Далее";
@@ -83,11 +84,13 @@ internal sealed partial class MainWindow {
         UiClick("ShowWelcome");UiClick("WelcomeNext");UiClick("WelcomeNext");UiClick("WelcomeNext");UiAssert(Find<FrameworkElement>("Welcome").Visibility==Visibility.Collapsed,"finish closes");
         youtube.IsChecked=discord.IsChecked=true;preferences.Services=3;detail.Text="Выбери сервисы и нажми «Подключить».";
         PaintServices();TestCatalogUi();
+        TestDesktopUi();
         Window.Width=Window.MinWidth;Window.Height=Window.MinHeight;
         foreach(string name in pageNames){Navigate(name);CaptureUi("-Small-"+name);}
         ShowCatalog();CaptureUi("-Small-Catalog");CloseCatalog();
         ShowWelcome();CaptureUi("-Small-Welcome");DismissWelcome();
-        File.WriteAllText(SmokePath,"PASS: catalog search, selection, cancel, empty guard and apply; four navigation pages; manual/automatic selection; onboarding next/back/skip/finish; modal background disabled; last service retained. Five views rendered at normal and minimum sizes. No engine started; no personal preferences written.");
+        TestExitUi();
+        File.WriteAllText(SmokePath,"PASS: catalog search, selection, cancel, empty guard and apply; five navigation pages; tray hide/restore and exit cancellation; manual/automatic selection; onboarding next/back/skip/finish; modal background disabled; last service retained. Views rendered at normal and minimum sizes. No engine started; no personal preferences written.");
     }
 }
 }

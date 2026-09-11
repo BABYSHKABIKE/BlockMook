@@ -12,7 +12,7 @@ internal sealed partial class MainWindow {
     private ReleaseInfo availableRelease;
     private CancellationTokenSource updateCancellation;
     private string downloadedUpdate;
-    private bool closeAfterUpdate;
+
     private void SetupUpdates() {
         Find<TextBlock>("AppVersion").Text=Updates.CurrentVersion;
         Find<TextBlock>("UpdateTitle").Text="BlockMook "+Updates.CurrentVersion;
@@ -55,7 +55,7 @@ internal sealed partial class MainWindow {
             finally {
                 updateCancellation=null;Find<Button>("CheckUpdates").IsEnabled=true;Find<Button>("DownloadUpdate").IsEnabled=true;
                 Find<Button>("CancelUpdate").Visibility=Visibility.Collapsed;Find<ProgressBar>("UpdateProgress").Visibility=Visibility.Collapsed;
-                if(closeAfterUpdate)Window.Close();
+                TryCompleteExit();
             }
         }
     }

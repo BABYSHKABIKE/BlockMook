@@ -1,12 +1,12 @@
 $ErrorActionPreference = 'Stop'
 & (Join-Path $PSScriptRoot 'prepare-sources.ps1')
-$taskVersion = '1.1.0'
+$taskVersion = '1.2.0'
 $taskOutput = Join-Path $PSScriptRoot ('out\packages\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $taskStage = Join-Path $taskOutput 'BlockMook'
 $taskZip = Join-Path $taskOutput 'BlockMook-Windows-x64.zip'
 New-Item -ItemType Directory -Path (Join-Path $taskStage 'app\engine'),(Join-Path $taskStage 'third-party-source') -Force | Out-Null
 # Share only these known product inputs. Never enumerate reports or user settings.
-foreach ($taskName in @('Start.cmd','README.md','CHANGELOG.md','THIRD-PARTY.md','LICENSE','engine.lock','build.ps1','test.ps1','prepare-engine.ps1','prepare-sources.ps1','package.ps1')) {
+foreach ($taskName in @('Start.cmd','Install.cmd','Install.ps1','build-brand.ps1','README.md','CHANGELOG.md','THIRD-PARTY.md','LICENSE','engine.lock','build.ps1','test.ps1','prepare-engine.ps1','prepare-sources.ps1','package.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $taskName) -Destination $taskStage
 }
 foreach ($taskName in @('src','assets','docs','distribution-licenses')) {

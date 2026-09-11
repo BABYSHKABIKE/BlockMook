@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $taskRoot = $PSScriptRoot
 $taskFramework = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
-$taskRefs = @('System.dll','System.Core.dll','System.Net.Http.dll','System.Xml.dll','System.Xaml.dll','System.Web.Extensions.dll') | ForEach-Object { '/r:' + (Join-Path $taskFramework $_) }
+$taskRefs = @('System.dll','System.Windows.Forms.dll','System.Drawing.dll','System.Core.dll','System.Net.Http.dll','System.Xml.dll','System.Xaml.dll','System.Web.Extensions.dll') | ForEach-Object { '/r:' + (Join-Path $taskFramework $_) }
 $taskRefs += @('PresentationFramework.dll','PresentationCore.dll','WindowsBase.dll') | ForEach-Object { '/r:' + (Join-Path $taskFramework ('WPF\' + $_)) }
 New-Item -ItemType Directory -Path (Join-Path $taskRoot 'app') -Force | Out-Null
 $taskSources = Get-ChildItem -LiteralPath (Join-Path $taskRoot 'src') -Filter '*.cs' | Select-Object -ExpandProperty FullName

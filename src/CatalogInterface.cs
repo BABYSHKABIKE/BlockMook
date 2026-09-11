@@ -28,11 +28,12 @@ internal sealed partial class MainWindow {
     }
     private void ResetChecks(){
         foreach(var result in results){result.Text="—";result.ToolTip=null;result.Foreground=Brushes.LightGray;}
+        shareableReport=null;Find<Button>("ExportDiagnostic").IsEnabled=false;Find<TextBox>("DiagnosticPreview").Text="Выбор сервисов изменён. Выполни новую проверку.";
         probeTime.Text="Выбор изменён · нужна проверка";
         Find<TextBlock>("ProbeDetails").Text="Проверка соединений не заменяет проверку видео, сообщений и звонков в приложении.";
     }
     private void ShowCatalog(){
-        if(busy||running)return;
+        if(busy||running||recovery.Wanted)return;
         catalogMask=Mask;Find<TextBox>("CatalogSearch").Text="";PaintCatalog();
         Find<Grid>("AppContent").IsEnabled=false;Find<Grid>("Catalog").Visibility=Visibility.Visible;Find<TextBox>("CatalogSearch").Focus();
     }
@@ -48,7 +49,7 @@ internal sealed partial class MainWindow {
             var definition=service;
             var text=new StackPanel();
             text.Children.Add(new TextBlock{Text=service.Name,FontSize=17,FontWeight=FontWeights.SemiBold});
-            text.Children.Add(new TextBlock{Text=service.Support,FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(214,245,120)),Margin=new Thickness(0,4,0,8)});
+            text.Children.Add(new TextBlock{Text=service.Support,FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(129,216,208)),Margin=new Thickness(0,4,0,8)});
             text.Children.Add(new TextBlock{Text=service.Description,FontSize=12,Foreground=new SolidColorBrush(Color.FromRgb(166,169,175)),TextWrapping=TextWrapping.Wrap});
             var toggle=new CheckBox{Content=text,IsChecked=(catalogMask&service.Bit)!=0,Margin=new Thickness(0,0,8,0)};
             AutomationProperties.SetName(toggle,service.Name);AutomationProperties.SetAutomationId(toggle,"CatalogService"+service.Bit);
@@ -59,7 +60,7 @@ internal sealed partial class MainWindow {
         CatalogCount();
     }
     private void ApplyCatalog(){
-        if(!Services.ValidMask(catalogMask)||busy||running)return;
+        if(!Services.ValidMask(catalogMask)||busy||running||recovery.Wanted)return;
         foreach(var service in Services.Items)ServiceControl(service).IsChecked=(catalogMask&service.Bit)!=0;
         preferences.Services=Mask;if(!manualProfile){profile=Core.LoadProfile(Mask);PaintProfile();}
         SavePreferences();PaintServices();ResetChecks();CloseCatalog();

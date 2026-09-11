@@ -20,7 +20,7 @@ internal sealed class ReleaseInfo {
 }
 
 internal static class Updates {
-    internal const string CurrentVersion="1.1.0";
+    internal const string CurrentVersion="1.2.0";
     internal const string Repository="BABYSHKABIKE/BlockMook";
     internal const string AssetName="BlockMook-Windows-x64.zip";
     internal const long MaxDownload=100*1024*1024;

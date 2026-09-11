@@ -40,6 +40,7 @@ internal static partial class Tests {
         TestDiagnostics(Path.Combine(Path.GetDirectoryName(path),"test-diagnostics"));
         TestConnection();
         TestUpdates();
+        TestDesktop(Path.Combine(Path.GetDirectoryName(path),"test-diagnostics"));
         TestServices(Path.Combine(Path.GetDirectoryName(path),"test-diagnostics"));
         TestPreferences(Path.Combine(Path.GetDirectoryName(path),"test-diagnostics","preferences.txt"));
         Check("Alternative is tried first without duplicate strategies",Core.DefaultProfile==1&&Core.ProfileOrder(1).SequenceEqual(new[]{1,0,2}));
