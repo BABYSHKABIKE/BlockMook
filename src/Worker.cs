@@ -101,7 +101,7 @@ internal static class Worker {
                             else if (command=="STATUS") await writer.WriteLineAsync(engine.Alive ? "RUNNING" : "STOPPED");
                             else {
                                 var parts=command.Split('|'); int profile,mask;
-                                if (parts.Length!=3 || parts[0]!="START" || !Int32.TryParse(parts[1],out profile) || !Int32.TryParse(parts[2],out mask) || profile<0 || profile>2 || mask<1 || mask>3) throw new ArgumentException("Недопустимая команда");
+                                if (parts.Length!=3 || parts[0]!="START" || !Int32.TryParse(parts[1],out profile) || !Int32.TryParse(parts[2],out mask) || profile<0 || profile>2 || !Services.ValidMask(mask)) throw new ArgumentException("Недопустимая команда");
                                 await engine.Start(profile,mask); await writer.WriteLineAsync("RUNNING");
                             }
                         } catch (Exception ex) { commandError="ERROR|"+ex.Message.Replace('\r',' ').Replace('\n',' '); }

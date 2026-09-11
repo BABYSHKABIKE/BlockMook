@@ -19,14 +19,14 @@ internal sealed class DiagnosticReport : IDisposable {
         try {
             Add("BLOCKMOOK "+Updates.CurrentVersion+" · "+(connection?"ПОДКЛЮЧЕНИЕ":"АВТОНОМНАЯ ДИАГНОСТИКА"));
             Add("НАЧАТО. Пока нет строки ИТОГ, проверка не завершена.");
-            Add("HTTPS и публичный WebSocket Hello. Вход в аккаунт, видео, голос и скорость не проверяются. Пароли, подписки VPN и история браузера не собираются.");
+            Add("HTTPS, TLS, публичный WebSocket Hello и STUN для Meet. Вход в аккаунт, видео, голос и скорость не проверяются. Пароли, подписки VPN и история браузера не собираются.");
         } catch {Dispose();throw;}
     }
     internal void Add(string text) {writer.WriteLine(DateTimeOffset.Now.ToString("o")+" | "+text.Replace('\r',' ').Replace('\n',' '));writer.Flush();file.Flush(true);}
     internal void Sample(string stage,ProbeResult[] values,int mask) {
         Add("ЭТАП: "+stage);
         foreach(var value in values) {Add(Probes.Urls[value.Index]+" | "+(value.Ok?"PASS":"FAIL")+" | "+value.Detail);foreach(string check in value.Checks)Add("  "+check);}
-        Add("Выбранных HTTPS-проверок успешно: "+Probes.Score(values,mask));
+        Add("Выбранных проверок соединения успешно: "+Probes.Score(values,mask));
     }
     public void Dispose(){try{writer.Dispose();}finally{file.Dispose();}}
 }

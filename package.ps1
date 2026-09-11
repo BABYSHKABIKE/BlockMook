@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 & (Join-Path $PSScriptRoot 'prepare-sources.ps1')
-$taskVersion = '1.0.0'
+$taskVersion = '1.1.0'
 $taskOutput = Join-Path $PSScriptRoot ('out\packages\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $taskStage = Join-Path $taskOutput 'BlockMook'
 $taskZip = Join-Path $taskOutput 'BlockMook-Windows-x64.zip'

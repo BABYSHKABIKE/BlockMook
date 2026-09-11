@@ -16,13 +16,13 @@ internal static partial class Tests {
     private static bool Throws(Action action){try{action();return false;}catch(ArgumentException){return true;}}
     internal static void Run(string path) {
         Check("Reject empty service selection",Throws(()=>Core.Domains(0)));
-        Check("Reject undefined selection bits",Throws(()=>Core.Domains(4)));
+        Check("Reject undefined selection bits",Throws(()=>Core.Domains(32)));
         Check("Reject undefined strategy",Throws(()=>Core.Arguments(9,3,"hosts.txt")));
         Check("Reject command-line quote injection",Throws(()=>Core.Arguments(0,3,"bad\" --injected")));
         Check("YouTube excludes Discord domains",Core.Domains(1).All(d=>!d.Contains("discord")));
         Check("Discord excludes YouTube domains",Core.Domains(2).All(d=>!d.Contains("youtube")&&!d.Contains("googlevideo")));
         Check("Video CDN included",Core.Domains(1).Contains("googlevideo.com"));
-        for(int p=0;p<3;p++)for(int mask=1;mask<=3;mask++) {
+        for(int p=0;p<3;p++)for(int mask=1;mask<=Services.AllMask;mask++) {
             string command=Core.Arguments(p,mask,@"C:\test path\hosts.txt");
             Check("Hostlist and scope "+p+"/"+mask,command.Contains("--hostlist="+Core.Q(@"C:\test path\hosts.txt")) && command.Contains("19294-19344")==((mask&2)!=0) && !command.Contains("--ipset=") && !command.Contains("%"));
         }
@@ -40,6 +40,7 @@ internal static partial class Tests {
         TestDiagnostics(Path.Combine(Path.GetDirectoryName(path),"test-diagnostics"));
         TestConnection();
         TestUpdates();
+        TestServices(Path.Combine(Path.GetDirectoryName(path),"test-diagnostics"));
         TestPreferences(Path.Combine(Path.GetDirectoryName(path),"test-diagnostics","preferences.txt"));
         Check("Alternative is tried first without duplicate strategies",Core.DefaultProfile==1&&Core.ProfileOrder(1).SequenceEqual(new[]{1,0,2}));
         Check("Saved preference first without duplicate strategies",Core.ProfileOrder(2).SequenceEqual(new[]{2,1,0}));
@@ -141,7 +142,7 @@ internal static partial class Tests {
         var report=new List<string>();
         string hosts=Path.Combine(Path.GetDirectoryName(output),"engine-test-hosts.txt");
         try {
-            for(int profile=0;profile<3;profile++)for(int mask=1;mask<=3;mask++) {
+            for(int profile=0;profile<3;profile++)for(int mask=1;mask<=Services.AllMask;mask++) {
                 File.WriteAllLines(hosts,Core.Domains(mask),new UTF8Encoding(false));
                 using(var process=new Process{StartInfo=new ProcessStartInfo(Path.Combine(Core.EngineRoot,"winws.exe"),"--dry-run "+Core.Arguments(profile,mask,hosts)){UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=Core.EngineRoot,RedirectStandardOutput=true,RedirectStandardError=true}}) {
                     process.Start();var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();
@@ -151,7 +152,7 @@ internal static partial class Tests {
                     report.Add("PASS native winws --dry-run profile="+profile+" mask="+mask);
                 }
             }
-            File.WriteAllLines(output,report.Concat(new[]{"9 native argument checks passed; traffic interception was not started."}));
+            File.WriteAllLines(output,report.Concat(new[]{"93 native argument checks passed; traffic interception was not started."}));
         } finally {File.Delete(hosts);}
     }
     private static string ReadReply(StreamReader reader) {

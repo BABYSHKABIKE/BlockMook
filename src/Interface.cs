@@ -17,6 +17,7 @@ internal sealed partial class MainWindow {
         isSmoke=smoke;preferences=smoke?new Preferences():Preferences.LoadUser();
         SetupUpdates();
         youtube.IsChecked=(preferences.Services&1)!=0;discord.IsChecked=(preferences.Services&2)!=0;
+        SetupCatalog();
         Find<CheckBox>("ReduceMotion").IsChecked=preferences.ReduceMotion;
         foreach(string name in pageNames){string selected=name;Find<Button>("Nav"+name).Click+=(s,e)=>Navigate(selected);}
         Find<CheckBox>("ReduceMotion").Click+=(s,e)=>{preferences.ReduceMotion=Find<CheckBox>("ReduceMotion").IsChecked==true;SavePreferences();};
@@ -35,7 +36,7 @@ internal sealed partial class MainWindow {
     }
     private void ServicesChanged(CheckBox changed) {
         if(Mask==0){changed.IsChecked=true;detail.Text="Оставь выбранным хотя бы один сервис.";}
-        preferences.Services=Mask;
+        preferences.Services=Mask;PaintServices();ResetChecks();
         if(!manualProfile){profile=Core.LoadProfile(Mask);PaintProfile();}
         SavePreferences();
     }
@@ -54,7 +55,7 @@ internal sealed partial class MainWindow {
     private void PaintWelcome() {
         Find<TextBlock>("WelcomeProgress").Text="0"+(welcomeStep+1)+" / 03";
         Find<TextBlock>("WelcomeTitle").Text=new[]{"Привет, это BlockMook.","Твои сервисы. Твой выбор.","Всё готово к старту."}[welcomeStep];
-        Find<TextBlock>("WelcomeText").Text=new[]{"Одна кнопка для YouTube и Discord. BlockMook сам подберёт способ подключения и проверит доступ.","Выбери нужные сервисы. Их можно изменить на главном экране, когда подключение выключено.","Отключи другой VPN или zapret, затем нажми «Подключить». Windows запросит права администратора. Закрытие окна отключит BlockMook."}[welcomeStep];
+        Find<TextBlock>("WelcomeText").Text=new[]{"YouTube, Discord и дополнительные сервисы из каталога. BlockMook подбирает способ подключения и проверяет соединения.","Выбери нужные сервисы. Другие сервисы, включая Google Meet, добавляются через «Добавить сервис» на главном экране.","Отключи другой VPN или zapret, затем нажми «Подключить». Windows запросит права администратора. Закрытие окна отключит BlockMook."}[welcomeStep];
         Find<FrameworkElement>("WelcomeServices").Visibility=welcomeStep==1?Visibility.Visible:Visibility.Collapsed;
         Find<Button>("WelcomeBack").Visibility=welcomeStep==0?Visibility.Hidden:Visibility.Visible;
         Find<Button>("WelcomeNext").Content=welcomeStep==2?"Начать":"Далее";
@@ -81,10 +82,12 @@ internal sealed partial class MainWindow {
         UiClick("WelcomeBack");UiAssert(welcomeStep==0,"back");UiClick("WelcomeSkip");UiAssert(Find<FrameworkElement>("Welcome").Visibility==Visibility.Collapsed&&Find<FrameworkElement>("AppContent").IsEnabled&&preferences.WelcomeDone,"skip closes and completes");
         UiClick("ShowWelcome");UiClick("WelcomeNext");UiClick("WelcomeNext");UiClick("WelcomeNext");UiAssert(Find<FrameworkElement>("Welcome").Visibility==Visibility.Collapsed,"finish closes");
         youtube.IsChecked=discord.IsChecked=true;preferences.Services=3;detail.Text="Выбери сервисы и нажми «Подключить».";
+        PaintServices();TestCatalogUi();
         Window.Width=Window.MinWidth;Window.Height=Window.MinHeight;
         foreach(string name in pageNames){Navigate(name);CaptureUi("-Small-"+name);}
+        ShowCatalog();CaptureUi("-Small-Catalog");CloseCatalog();
         ShowWelcome();CaptureUi("-Small-Welcome");DismissWelcome();
-        File.WriteAllText(SmokePath,"PASS: four navigation pages; manual/automatic selection; onboarding next/back/skip/finish; modal background disabled; last service retained. Five views rendered at normal and minimum sizes. No engine started; no personal preferences written.");
+        File.WriteAllText(SmokePath,"PASS: catalog search, selection, cancel, empty guard and apply; four navigation pages; manual/automatic selection; onboarding next/back/skip/finish; modal background disabled; last service retained. Five views rendered at normal and minimum sizes. No engine started; no personal preferences written.");
     }
 }
 }

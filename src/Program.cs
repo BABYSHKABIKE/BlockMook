@@ -20,8 +20,9 @@ internal static class Program {
             if(args.Length==2 && args[0]=="--engine-test") {Tests.EngineParameters(args[1]);return 0;}
             if(args.Length==4 && args[0]=="--worker") { Worker.Run(args[1],Int32.Parse(args[2]),Int64.Parse(args[3])).GetAwaiter().GetResult(); return 0; }
             if(args.Length==2 && args[0]=="--test") { Tests.Run(args[1]); return 0; }
-            if(args.Length==2 && args[0]=="--probe") {
-                var results=Probes.All().GetAwaiter().GetResult();
+            if((args.Length==2||args.Length==3) && args[0]=="--probe") {
+                int mask=args.Length==3?Int32.Parse(args[2]):3;
+                var results=Probes.All(mask,CancellationToken.None).GetAwaiter().GetResult();
                 File.WriteAllLines(args[1],new[]{"Environment: "+(Core.Conflict()??"No known conflict")}.Concat(results.SelectMany(r=>new[]{Probes.Urls[r.Index]+" | "+r.Ok+" | "+r.Detail}.Concat(r.Checks))));
                 return 0;
             }
@@ -66,7 +67,7 @@ internal sealed partial class MainWindow {
         diagnostic=Find<Button>("Diagnostic");cancelDiagnostic=Find<Button>("CancelDiagnostic");openReports=Find<Button>("OpenReports");diagnosticStatus=Find<TextBlock>("DiagnosticStatus");
         youtube=Find<CheckBox>("YouTube"); discord=Find<CheckBox>("Discord");
         state=Find<TextBlock>("State"); detail=Find<TextBlock>("StateDetail"); environment=Find<TextBlock>("Environment"); profileName=Find<TextBlock>("ProfileName"); probeTime=Find<TextBlock>("ProbeTime"); log=Find<TextBox>("Log");
-        results=Enumerable.Range(0,3).Select(i=>Find<TextBlock>("Result"+i)).ToArray();
+        results=Enumerable.Range(0,6).Select(i=>Find<TextBlock>("Result"+i)).ToArray();
         profiles=Enumerable.Range(0,3).Select(i=>Find<Button>("Profile"+i)).ToArray();
         SetupUi(smoke);
         manualProfile=preferences.ManualProfile>=0;profile=manualProfile?preferences.ManualProfile:Core.LoadProfile(Mask); PaintProfile();
@@ -103,11 +104,11 @@ internal sealed partial class MainWindow {
             finally {busy=false;Controls();}
         };
     }
-    private int Mask {get{return (youtube.IsChecked==true?1:0)|(discord.IsChecked==true?2:0);}}
+    private int Mask {get{return Services.Items.Where(s=>ServiceControl(s).IsChecked==true).Sum(s=>s.Bit);}}
     private void Write(string message) { if(closing)return; log.AppendText(DateTime.Now.ToString("HH:mm:ss")+"  "+message+Environment.NewLine); if(log.Text.Length>14000)log.Text=log.Text.Substring(log.Text.Length-10000);log.ScrollToEnd(); }
     private void UpdateEnvironment() { string conflict=Core.Conflict();environment.Text=conflict==null?"":"Обнаружен другой VPN или zapret. Отключи его перед подключением.";environment.ToolTip=conflict;Find<FrameworkElement>("EnvironmentBanner").Visibility=conflict==null?Visibility.Collapsed:Visibility.Visible; }
     private void PaintProfile() { profileName.Text=(manualProfile?"Вручную · ":"Автоматически · ")+Core.Names[profile];for(int i=0;i<3;i++)profiles[i].Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile&&i==profile?"#384326":"#2B2D31"));auto.Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile?"#2B2D31":"#384326")); }
-    private void Controls() { Find<TextBlock>("ConnectionBadge").Text=connectionCancellation!=null?"ПОДКЛЮЧАЕМ":diagnosticCancellation!=null?"ДИАГНОСТИКА":running?"ДОСТУП ВКЛЮЧЁН":"НЕ ПОДКЛЮЧЕНО"; connect.IsEnabled=!busy||connectionCancellation!=null;auto.IsEnabled=!busy&&!running;probe.IsEnabled=!busy;diagnostic.IsEnabled=!busy;youtube.IsEnabled=discord.IsEnabled=!busy&&!running;Find<Button>("ShowWelcome").IsEnabled=!busy&&!running;foreach(var p in profiles)p.IsEnabled=!busy&&!running;connect.Content=connectionCancellation!=null?"Отменить":running?"Отключить":"Подключить";Find<System.Windows.Shapes.Ellipse>("StateDot").Fill=new SolidColorBrush((Color)ColorConverter.ConvertFromString(running?"#D6F578":busy?"#DDCAA3":"#80838A")); }
+    private void Controls() { Find<TextBlock>("ConnectionBadge").Text=connectionCancellation!=null?"ПОДКЛЮЧАЕМ":diagnosticCancellation!=null?"ДИАГНОСТИКА":running?"ДОСТУП ВКЛЮЧЁН":"НЕ ПОДКЛЮЧЕНО"; connect.IsEnabled=!busy||connectionCancellation!=null;auto.IsEnabled=!busy&&!running;probe.IsEnabled=!busy;diagnostic.IsEnabled=!busy;foreach(var service in Services.Items)ServiceControl(service).IsEnabled=!busy&&!running;Find<Button>("AddService").IsEnabled=!busy&&!running;Find<Button>("ShowWelcome").IsEnabled=!busy&&!running;foreach(var p in profiles)p.IsEnabled=!busy&&!running;connect.Content=connectionCancellation!=null?"Отменить":running?"Отключить":"Подключить";Find<System.Windows.Shapes.Ellipse>("StateDot").Fill=new SolidColorBrush((Color)ColorConverter.ConvertFromString(running?"#D6F578":busy?"#DDCAA3":"#80838A")); }
     private async Task RunDiagnostic() {
         if(running)await Stop();
         using(var report=new DiagnosticReport(DiagnosticReport.Folder))
@@ -117,7 +118,7 @@ internal sealed partial class MainWindow {
             bool startPending=false;
             try {
                 var outcome=await Diagnostics.Run(report,Mask,Core.Conflict,
-                    async()=>{Core.VerifyEngine();await bridge.Connect();},()=>Probes.All(cancellation.Token),
+                    async()=>{Core.VerifyEngine();await bridge.Connect();},()=>Probes.All(Mask,cancellation.Token),
                     async selected=>{startPending=true;if(await bridge.Send("START|"+selected+"|"+Mask)!="RUNNING")throw new IOException("Движок не подтвердил запуск");},
                     async()=>{if(!bridge.Connected){if(startPending)throw new IOException("Канал потерян после команды запуска");return;}if(await bridge.Send("STOP")!="STOPPED")throw new IOException("Движок не подтвердил остановку");startPending=false;},
                     bridge.Dispose,cancellation.Token,message=>{state.Text=message;Write(message);});
@@ -155,9 +156,10 @@ internal sealed partial class MainWindow {
         foreach(var block in results){block.Text="Проверяем…";block.Foreground=Brushes.LightGray;}
         string conflict=running?null:Core.Conflict();
         probeTime.Text="Проверяем · до 10 секунд";
-        var values=await Probes.All(connectionCancellation==null?CancellationToken.None:connectionCancellation.Token);
+        var values=await Probes.All(Mask,connectionCancellation==null?CancellationToken.None:connectionCancellation.Token);
         if(closing)return values;
-        foreach(var value in values){results[value.Index].Text=value.Ok?"Доступен":"Не подтверждён";results[value.Index].Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(value.Ok?"#D6F578":"#DDCAA3"));results[value.Index].ToolTip=value.Detail+"\n"+String.Join("\n",value.Checks);Write(new[]{"YouTube","Discord","Microsoft"}[value.Index]+": "+value.Detail);foreach(string check in value.Checks)Write(check);}
+        foreach(var value in values){results[value.Index].Text=value.Ok?(value.Index>=3?"TLS: доступен":"Доступен"):"Не подтверждён";results[value.Index].Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(value.Ok?"#D6F578":"#DDCAA3"));results[value.Index].ToolTip=value.Detail+"\n"+String.Join("\n",value.Checks);Write(Services.ProbeName(value.Index)+": "+value.Detail);foreach(string check in value.Checks)Write(check);}
+        Find<TextBlock>("ProbeDetails").Text=String.Join("\n\n",values.Select(v=>Services.ProbeName(v.Index)+" · "+v.Detail+"\n"+String.Join("\n",v.Checks)));
         probeTime.Text="Проверено в "+DateTime.Now.ToString("HH:mm")+(conflict!=null?" · другой VPN активен":"");
         if(running){detail.Text=Probes.AllSelected(values,Mask)?"Проверки выбранных сервисов прошли. Теперь можно открыть приложения; видео и голос требуют отдельной проверки.":"Часть проверок не прошла. Причина и результаты компонентов доступны в журнале.";}
         return values;
@@ -176,7 +178,7 @@ internal sealed partial class MainWindow {
                 if(!running){state.Text="Доступ не подтверждён";detail.Text="Проверенные стратегии не дали подтверждённого доступа. Обход выключен; отчёт сохранён.";}
                 else{
                     state.Text=outcome.Verified?"Подключено":"Доступ частичный";
-                    detail.Text=outcome.Verified?"Проверки пройдены. Можно открыть выбранные сервисы. Закрытие окна отключит BlockMook.":"Часть проверок не прошла. Подключение включено; подробности — в «Помощи».";
+                    detail.Text=outcome.Verified?"Соединения проверены. Видео, сообщения и звонки проверь в выбранных приложениях.":"Часть проверок не прошла. Подключение включено; подробности — в «Помощи».";
                     if(outcome.Verified)try{Core.SaveProfile(outcome.Profile,Mask);}catch(Exception ex){Write("Не удалось сохранить профиль: "+ex.Message);}
                 }
                 report.Add("ИТОГ: "+(outcome.Verified?"ПРОВЕРЕНО":running?"ЧАСТИЧНО":"НЕ ПОДТВЕРЖДЕНО"));

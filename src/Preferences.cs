@@ -15,7 +15,7 @@ internal sealed class Preferences {
         foreach(string line in text.Split('\n')) {
             var pair=line.Trim().Split('=');if(pair.Length!=2)continue;
             int mask;bool flag;
-            if(pair[0]=="services"&&Int32.TryParse(pair[1],out mask)&&mask>=1&&mask<=3)value.Services=mask;
+            if(pair[0]=="services"&&Int32.TryParse(pair[1],out mask)&&BlockMook.Services.ValidMask(mask))value.Services=mask;
             if(pair[0]=="profile"&&Int32.TryParse(pair[1],out mask)&&mask>=-1&&mask<Core.Names.Length)value.ManualProfile=mask;
             if(pair[0]=="welcome"&&Boolean.TryParse(pair[1],out flag))value.WelcomeDone=flag;
             if(pair[0]=="reduceMotion"&&Boolean.TryParse(pair[1],out flag))value.ReduceMotion=flag;

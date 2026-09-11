@@ -14,7 +14,7 @@ $taskHashes = foreach($taskName in $taskEngineFiles) {
     $taskEntry
 }
 [IO.File]::WriteAllLines((Join-Path $taskRoot 'app\engine.sha256'),[string[]]$taskHashes)
-& (Join-Path $taskFramework 'csc.exe') /nologo /target:winexe /platform:x64 /optimize+ /utf8output ('/win32icon:' + (Join-Path $taskRoot 'assets\BlockMook.ico')) ('/out:' + (Join-Path $taskRoot 'app\BlockMook.exe')) ('/resource:' + (Join-Path $taskRoot 'src\Main.xaml') + ',Main.xaml') ('/resource:' + (Join-Path $taskRoot 'assets\BlockMook.ico') + ',BlockMook.ico') ('/resource:' + (Join-Path $taskRoot 'app\engine.sha256') + ',engine.sha256') @taskRefs @taskSources
+& (Join-Path $taskFramework 'csc.exe') /nologo /target:winexe /platform:x64 /optimize+ /utf8output ('/win32icon:' + (Join-Path $taskRoot 'assets\BlockMook.ico')) ('/out:' + (Join-Path $taskRoot 'app\BlockMook.exe')) ('/resource:' + (Join-Path $taskRoot 'src\Main.xaml') + ',Main.xaml') ('/resource:' + (Join-Path $taskRoot 'assets\BlockMook.ico') + ',BlockMook.ico') ('/resource:' + (Join-Path $taskRoot 'app\engine.sha256') + ',engine.sha256') ('/resource:' + (Join-Path $taskRoot 'assets\signal-root.cer') + ',signal-root.cer') @taskRefs @taskSources
 if ($LASTEXITCODE -ne 0) { throw 'C# build failed' }
 Copy-Item -LiteralPath (Join-Path $taskRoot 'src\app.config') -Destination (Join-Path $taskRoot 'app\BlockMook.exe.config')
 Write-Output 'Build OK: app\BlockMook.exe'

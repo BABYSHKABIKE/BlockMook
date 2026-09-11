@@ -21,7 +21,7 @@ internal static class ConnectionFlow {
                         if(Probes.AllSelected(values,mask)){log("Проверки выбранных сервисов подтверждены дважды. Обход оставлен включённым.");keep=true;return new ConnectionOutcome{Running=true,Verified=true,Profile=profile,Results=values};}
                     }
                     int score=Probes.Score(values,mask);
-                    if(values[2].Ok&&score>bestScore){best=profile;bestScore=score;}
+                    if(Probes.ControlOk(values)&&score>bestScore){best=profile;bestScore=score;}
                 }catch(Exception ex){error=ex;}
                 await stop();token.ThrowIfCancellationRequested();
                 if(error!=null){if(error is OperationCanceledException || error is System.ComponentModel.Win32Exception && ((System.ComponentModel.Win32Exception)error).NativeErrorCode==1223)throw error;log("Ошибка профиля: "+error.Message);}
@@ -29,7 +29,7 @@ internal static class ConnectionFlow {
             if(best>=0){
                 token.ThrowIfCancellationRequested();log("Повторный запуск частично работающего профиля: "+Core.Names[best]);await start(best);
                 var values=await probe();sample(best,values);token.ThrowIfCancellationRequested();
-                if(values[2].Ok&&Probes.Score(values,mask)>0){log("Доступ подтверждён частично. Профиль оставлен включённым; все сервисы рабочими не объявляются.");keep=true;return new ConnectionOutcome{Running=true,Verified=false,Profile=best,Results=values};}
+                if(Probes.ControlOk(values)&&Probes.Score(values,mask)>0){log("Доступ подтверждён частично. Профиль оставлен включённым; все сервисы рабочими не объявляются.");keep=true;return new ConnectionOutcome{Running=true,Verified=false,Profile=best,Results=values};}
             }
             await stop();log("Рабочий профиль не подтверждён. Обход выключен.");return new ConnectionOutcome();
         }finally{if(!keep)abort();}
