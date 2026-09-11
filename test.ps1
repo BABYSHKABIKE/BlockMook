@@ -3,6 +3,8 @@ $taskOutput = Join-Path $PSScriptRoot 'out\checks'
 New-Item -ItemType Directory -Path $taskOutput -Force | Out-Null
 foreach ($taskMode in @('test','ui-smoke')) {
     $taskReport = Join-Path $taskOutput ($taskMode + '.txt')
+    # A previous successful report must never make a skipped or crashed run pass.
+    [IO.File]::WriteAllText($taskReport,'INCOMPLETE: current run has not produced a report')
     $taskProcess = Start-Process -FilePath (Join-Path $PSScriptRoot 'app\BlockMook.exe') -ArgumentList @('--'+$taskMode,('"'+$taskReport+'"')) -WindowStyle Hidden -PassThru
     if (-not $taskProcess.WaitForExit(30000)) { throw ($taskMode+' timed out') }
     if (-not (Test-Path -LiteralPath $taskReport)) { throw ($taskMode+' did not write a report') }

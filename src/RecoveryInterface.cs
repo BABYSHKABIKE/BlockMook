@@ -11,7 +11,7 @@ internal sealed partial class MainWindow {
     private CancellationTokenSource healthCancellation;
     private void ConnectionEnvironmentChanged(string message){
         if(!preferences.ReconnectOnChange||!recovery.Wanted||recovery.Paused||exitRequested)return;
-        recovery.Changed(DateTime.UtcNow);Find<System.Windows.Controls.TextBlock>("RecoveryStatus").Text=message;
+        RecordNetworkEvent(message);recovery.Changed(DateTime.UtcNow);Find<System.Windows.Controls.TextBlock>("RecoveryStatus").Text=message;
     }
     private async Task UserToggle(){
         if(exitRequested)return;
@@ -45,7 +45,7 @@ internal sealed partial class MainWindow {
         if(conflict!="CLEAR"){
             // Only stop our own filter when another network application takes over.
             if(running)await Stop();
-            recovery.NextCheck=now.AddSeconds(30);Find<System.Windows.Controls.TextBlock>("RecoveryStatus").Text="Восстановление ожидает отключения другого VPN или zapret.";return;
+            recovery.NextCheck=now.AddSeconds(30);Find<System.Windows.Controls.TextBlock>("RecoveryStatus").Text="Восстановление ожидает отключения другого VPN или другой сетевой инструмент.";return;
         }
         if(running){
             healthChecking=true;Controls();
@@ -68,10 +68,10 @@ internal sealed partial class MainWindow {
         }
         recovering=true;Controls();
         try{
-            Write("Автовосстановление · попытка "+recovery.Attempts+" из 3");
+            RecordNetworkEvent("Автовосстановление · попытка "+recovery.Attempts+" из 3");Write("Автовосстановление · попытка "+recovery.Attempts+" из 3");
             await Stop();if(!recovery.Wanted||exitRequested)return;
             await ConnectAutomatically();
-            recovery.Finished(DateTime.UtcNow,running&&lastConnectionHealthy);
+            recovery.Finished(DateTime.UtcNow,running&&lastConnectionHealthy);RecordNetworkEvent(running&&lastConnectionHealthy?"Соединение восстановлено":"Восстановление не подтверждено");
             Find<System.Windows.Controls.TextBlock>("RecoveryStatus").Text=running&&lastConnectionHealthy?"Соединение восстановлено · "+DateTime.Now.ToString("HH:mm"):"Восстановление не подтверждено.";
         }catch(Exception ex){
             bridge.Dispose();running=false;recovery.Finished(DateTime.UtcNow,false);Write("Восстановление: "+ex.Message);

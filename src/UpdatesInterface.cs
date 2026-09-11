@@ -14,8 +14,8 @@ internal sealed partial class MainWindow {
     private string downloadedUpdate;
 
     private void SetupUpdates() {
-        Find<TextBlock>("AppVersion").Text=Updates.CurrentVersion;
-        Find<TextBlock>("UpdateTitle").Text="BlockMook "+Updates.CurrentVersion;
+        Find<TextBlock>("AppVersion").Text=Updates.DisplayVersion;
+        Find<TextBlock>("UpdateTitle").Text="BlockMook "+Updates.DisplayVersion;
         Find<Button>("CheckUpdates").Click+=async(s,e)=>await UpdateOperation(false);
         Find<Button>("DownloadUpdate").Click+=async(s,e)=>await UpdateOperation(true);
         Find<Button>("CancelUpdate").Click+=(s,e)=>{if(updateCancellation!=null)updateCancellation.Cancel();};
@@ -45,10 +45,10 @@ internal sealed partial class MainWindow {
                     availableRelease=await Updates.Latest(cancellation.Token);
                     if(availableRelease==null){status.Text="Публичных релизов пока нет.";return;}
                     bool newer=availableRelease.Version>Updates.Installed;
-                    status.Text=newer?"Доступна версия "+availableRelease.Version.ToString(3):"У тебя актуальная версия.";
-                    Find<TextBlock>("ReleaseNotes").Text=availableRelease.Notes;
+                    status.Text=newer?"Доступна версия "+availableRelease.Version.ToString(3):Updates.DevelopmentBuild?"Новых публичных обновлений нет. У тебя рабочая сборка BlockMook 1.0.":"У тебя актуальная версия.";
+                    if(newer||!Updates.DevelopmentBuild)Find<TextBlock>("ReleaseNotes").Text=availableRelease.Notes;
                     Find<Button>("DownloadUpdate").Content=newer?"Скачать "+availableRelease.Version.ToString(3):"Скачать эту версию";
-                    Find<Button>("DownloadUpdate").Visibility=availableRelease.Version>=Updates.Installed?Visibility.Visible:Visibility.Collapsed;
+                    Find<Button>("DownloadUpdate").Visibility=(newer||!Updates.DevelopmentBuild&&availableRelease.Version==Updates.Installed)?Visibility.Visible:Visibility.Collapsed;
                 }
             } catch(OperationCanceledException){status.Text="Операция отменена или время ожидания истекло. Можно повторить.";}
             catch(Exception ex){status.Text=ex is HttpRequestException?"Не удалось связаться с GitHub. Проверь интернет и попробуй ещё раз.":ex.Message;Write("Обновления: "+ex.Message);}

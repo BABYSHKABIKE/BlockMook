@@ -35,7 +35,7 @@ internal static partial class Tests {
         Check("Export omits raw logs paths and addresses",!summary.Contains("private")&&!summary.Contains("192.0.2.1")&&!summary.Contains("secret"));
         Check("Diagnostic states VPN context and selected services only",summary.Contains("VPN")&&summary.Contains("YouTube")&&!summary.Contains("Discord"));
         Check("Missing control has actionable advice",DiagnosticSummary.Build(1,values.Where(v=>v.Index!=2).ToArray(),false).Contains("проверь другие сайты"));
-        string shortcut=DesktopIntegration.CreateShortcut(Path.Combine(folder,"shortcut"));
+        string shortcut=DesktopIntegration.CreateShortcut(Path.Combine(folder,"shortcut-"+Guid.NewGuid().ToString("N")));
         Check("Desktop shortcut created outside real Desktop in test",File.Exists(shortcut)&&new FileInfo(shortcut).Length>76);
         Check("Creating the same shortcut is repeatable",DesktopIntegration.CreateShortcut(Path.GetDirectoryName(shortcut))==shortcut);
     }

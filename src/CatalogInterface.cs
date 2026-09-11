@@ -20,7 +20,7 @@ internal sealed partial class MainWindow {
         Find<Button>("CatalogClose").Click+=(s,e)=>CloseCatalog();
         Find<Button>("CatalogApply").Click+=(s,e)=>ApplyCatalog();
         Find<TextBox>("CatalogSearch").TextChanged+=(s,e)=>PaintCatalog();
-        Window.PreviewKeyDown+=(s,e)=>{if(e.Key==Key.Escape&&Find<Grid>("Catalog").Visibility==Visibility.Visible){CloseCatalog();e.Handled=true;}};
+        Window.PreviewKeyDown+=(s,e)=>{if(e.Key==Key.Escape&&Find<Grid>("TrayNotice").Visibility!=Visibility.Visible&&Find<Grid>("Catalog").Visibility==Visibility.Visible){CloseCatalog();e.Handled=true;}};
     }
     private void PaintServices(){
         foreach(var service in Services.Items){ServiceControl(service).Visibility=(Mask&service.Bit)!=0?Visibility.Visible:Visibility.Collapsed;}

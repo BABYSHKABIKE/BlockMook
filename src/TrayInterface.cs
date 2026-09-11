@@ -58,8 +58,9 @@ internal sealed partial class MainWindow {
         };
         Find<Button>("CreateShortcut").Click+=(s,e)=>{try{Find<TextBlock>("DesktopStatus").Text=isSmoke?"Тест: ярлык не создавался.":"Ярлык создан: "+DesktopIntegration.CreateShortcut(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));}catch(Exception ex){Find<TextBlock>("DesktopStatus").Text=ex.Message;}};
         Find<Button>("ExitApp").Click+=(s,e)=>RequestExit();
-        Find<Button>("TrayNoticeHide").Click+=(s,e)=>{preferences.TrayExplained=true;SavePreferences();Find<Grid>("TrayNotice").Visibility=Visibility.Collapsed;Find<Grid>("AppContent").IsEnabled=true;Window.Hide();};
+        Find<Button>("TrayNoticeHide").Click+=(s,e)=>{CancelCloseChoice();Window.Hide();};
         Find<Button>("TrayNoticeExit").Click+=(s,e)=>RequestExit();
+        Find<Button>("TrayNoticeCancel").Click+=(s,e)=>CancelCloseChoice();
         Window.Closing+=OnWindowClosing;
         if(isSmoke)return;
         trayMenu=new Forms.ContextMenuStrip{BackColor=Drawing.Color.FromArgb(12,14,15),ForeColor=Drawing.Color.FromArgb(145,230,222),ShowImageMargin=false,Font=new Drawing.Font("Segoe UI",10),Renderer=new Forms.ToolStripProfessionalRenderer(new TrayColors())};
@@ -87,15 +88,20 @@ internal sealed partial class MainWindow {
     private void OnWindowClosing(object sender,CancelEventArgs args){
         if(closing||isSmoke){DisposeDesktop();return;}
         args.Cancel=true;
-        if(!exitRequested&&preferences.CloseToTray&&tray!=null){
-            HideToTray();
+        if(!exitRequested){
+            ShowCloseChoice();
             return;
         }
         RequestExit();
     }
-    private void HideToTray(){
-        if(!preferences.TrayExplained){Find<Grid>("Catalog").Visibility=Visibility.Collapsed;Find<Grid>("Welcome").Visibility=Visibility.Collapsed;Find<Grid>("AppContent").IsEnabled=false;Find<Grid>("TrayNotice").Visibility=Visibility.Visible;Find<Button>("TrayNoticeHide").Focus();}
-        else Window.Hide();
+    private void ShowCloseChoice(){
+        Find<Grid>("AppContent").IsEnabled=false;Find<Grid>("TrayNotice").Visibility=Visibility.Visible;
+        Find<Button>("TrayNoticeHide").IsEnabled=isSmoke||tray!=null;
+        Find<Button>("TrayNoticeCancel").Focus();
+    }
+    private void CancelCloseChoice(){
+        Find<Grid>("TrayNotice").Visibility=Visibility.Collapsed;
+        Find<Grid>("AppContent").IsEnabled=Find<Grid>("Catalog").Visibility!=Visibility.Visible&&Find<Grid>("Welcome").Visibility!=Visibility.Visible;
     }
     private void RequestExit(){
         if(exitRequested)return;exitRequested=true;recovery.Stop();timer.Stop();lifetime.Cancel();
@@ -105,7 +111,7 @@ internal sealed partial class MainWindow {
     }
     private void TryCompleteExit(){if(!exitRequested||busy||updateCancellation!=null)return;closing=true;DisposeDesktop();Window.Close();}
     private void DisposeDesktop(){
-        if(desktopDisposed)return;desktopDisposed=true;timer.Stop();lifetime.Cancel();bridge.Dispose();
+        if(desktopDisposed)return;desktopDisposed=true;DisposeNetwork();timer.Stop();lifetime.Cancel();bridge.Dispose();
         if(showWait!=null)showWait.Unregister(null);if(showSignal!=null)showSignal.Dispose();
         if(tray!=null){tray.Visible=false;tray.Dispose();}if(trayMenu!=null)trayMenu.Dispose();if(trayImage!=null)trayImage.Dispose();
         if(!isSmoke){NetworkChange.NetworkAddressChanged-=NetworkChanged;SystemEvents.PowerModeChanged-=PowerChanged;if(Application.Current!=null)Application.Current.SessionEnding-=SessionEnding;}
@@ -113,7 +119,7 @@ internal sealed partial class MainWindow {
     private void NotifyFailure(string message){if(tray==null||!preferences.Notifications||exitRequested)return;tray.ShowBalloonTip(7000,"BlockMook · требуется внимание",message,Forms.ToolTipIcon.Warning);}
     private void PaintDesktop(){
         Find<CheckBox>("ReconnectOnChange").IsEnabled=preferences.AutoRecover;
-        Find<TextBlock>("CloseHint").Text=preferences.CloseToTray?"Крестик скрывает окно в трей":"Закрытие окна отключает BlockMook";
+        Find<TextBlock>("CloseHint").Text="Крестик: убрать в трей или закрыть полностью";
         Find<Button>("QuickDiagnostic").IsEnabled=!busy&&!exitRequested;
         if(tray==null)return;
         string status=recovering?"восстановление":recovery.Paused?"нужна проверка":running?"подключён":"отключён";
@@ -123,10 +129,16 @@ internal sealed partial class MainWindow {
     }
     private void TestDesktopUi(){
         Navigate("Home");recovery.Start(DateTime.UtcNow,3);running=true;
-        preferences.TrayExplained=false;HideToTray();UiAssert(Find<Grid>("TrayNotice").Visibility==Visibility.Visible&&Window.IsVisible,"first close explains tray");CaptureUi("-TrayNotice");
+        preferences.TrayExplained=false;ShowCloseChoice();UiAssert(Find<Grid>("TrayNotice").Visibility==Visibility.Visible&&Window.IsVisible,"close offers explicit choices");CaptureUi("-TrayNotice");
         UiClick("TrayNoticeHide");UiAssert(!Window.IsVisible&&running&&recovery.Wanted,"hiding keeps connection intent");
         RestoreWindow();UiAssert(Window.IsVisible&&Find<Grid>("AppContent").IsEnabled,"restore hidden window");
-        HideToTray();UiAssert(!Window.IsVisible,"next close hides without prompt");RestoreWindow();recovery.Stop();running=false;
+        preferences.TrayExplained=true;preferences.CloseToTray=false;ShowCloseChoice();UiAssert(Window.IsVisible&&Find<Grid>("TrayNotice").Visibility==Visibility.Visible,"every close asks even with old preferences");
+        UiClick("TrayNoticeCancel");UiAssert(Window.IsVisible&&Find<Grid>("TrayNotice").Visibility==Visibility.Collapsed&&running&&recovery.Wanted,"cancel leaves connection and window intact");
+        ShowWelcome();ShowCloseChoice();UiClick("TrayNoticeCancel");UiAssert(Find<Grid>("Welcome").Visibility==Visibility.Visible&&!Find<Grid>("AppContent").IsEnabled,"cancel preserves underlying onboarding modal");DismissWelcome();
+        ShowCloseChoice();UiClick("TrayNoticeHide");UiAssert(!Window.IsVisible,"explicit tray choice hides on repeated close");RestoreWindow();recovery.Stop();running=false;
+        ShowCatalog();ShowCloseChoice();
+        var escape=new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,PresentationSource.FromVisual(Window),Environment.TickCount,System.Windows.Input.Key.Escape){RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent};Window.RaiseEvent(escape);
+        UiAssert(escape.Handled&&Find<Grid>("TrayNotice").Visibility==Visibility.Collapsed&&Find<Grid>("Catalog").Visibility==Visibility.Visible&&!Find<Grid>("AppContent").IsEnabled,"Escape cancels only top close dialog and preserves catalog");CloseCatalog();
         recovery.Start(DateTime.UtcNow,3);MonitorConnection().GetAwaiter().GetResult();UiAssert(recovery.Paused&&!bridge.Connected,"lost worker pauses without automatic elevation");recovery.Stop();
         using(var cancellation=new CancellationTokenSource()){
             busy=true;connectionCancellation=cancellation;recovery.Start(DateTime.UtcNow,3);UserToggle().GetAwaiter().GetResult();UiAssert(cancellation.IsCancellationRequested&&!recovery.Wanted&&userStopRequested,"manual disconnect cancels pending recovery");connectionCancellation=null;userStopRequested=false;busy=false;
@@ -139,7 +151,7 @@ internal sealed partial class MainWindow {
     private void TestExitUi(){
         recovery.Start(DateTime.UtcNow,3);
         using(var cancellation=new CancellationTokenSource()){
-            connectionCancellation=cancellation;RequestExit();UiAssert(exitRequested&&!recovery.Wanted&&lifetime.IsCancellationRequested&&cancellation.IsCancellationRequested,"exit cancels recovery and connection");connectionCancellation=null;
+            connectionCancellation=cancellation;ShowCloseChoice();UiClick("TrayNoticeExit");UiAssert(exitRequested&&!recovery.Wanted&&lifetime.IsCancellationRequested&&cancellation.IsCancellationRequested,"full exit choice cancels recovery and connection");connectionCancellation=null;
         }
     }
 }

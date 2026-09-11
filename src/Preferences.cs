@@ -10,7 +10,10 @@ internal sealed class Preferences {
     internal bool AutoConnect,TrayExplained;
     internal static string DefaultPath {get{return Path.Combine(Core.DataRoot,"interface-v1.txt");}}
     internal static Preferences LoadUser() {
-        return Load(File.Exists(DefaultPath)?DefaultPath:Path.Combine(Core.LegacyDataRoot,"interface-v1.txt"));
+        return LoadUser(DefaultPath,Path.Combine(Core.LegacyDataRoot,"interface-v1.txt"));
+    }
+    internal static Preferences LoadUser(string path,string legacyPath) {
+        string text=SettingsStorage.Read(path);return Parse(text.Length==0?SettingsStorage.Read(legacyPath):text);
     }
     internal static Preferences Parse(string text) {
         var value=new Preferences();
@@ -31,14 +34,11 @@ internal sealed class Preferences {
         return value;
     }
     internal static Preferences Load(string path) {
-        try{return Parse(File.ReadAllText(path));}catch(IOException){return new Preferences();}catch(UnauthorizedAccessException){return new Preferences();}
+        return Parse(SettingsStorage.Read(path));
     }
     internal void Save(string path) {
         Core.Domains(Services);
-        Directory.CreateDirectory(Path.GetDirectoryName(path));
-        string temporary=path+".tmp";
-        File.WriteAllText(temporary,"services="+Services+"\nwelcome="+WelcomeDone+"\nreduceMotion="+ReduceMotion+"\nprofile="+ManualProfile+"\ncloseToTray="+CloseToTray+"\nautoRecover="+AutoRecover+"\nreconnectOnChange="+ReconnectOnChange+"\nnotifications="+Notifications+"\nautoConnect="+AutoConnect+"\ntrayExplained="+TrayExplained+"\n");
-        if(File.Exists(path))File.Replace(temporary,path,null);else File.Move(temporary,path);
+        SettingsStorage.Write(path,"services="+Services+"\nwelcome="+WelcomeDone+"\nreduceMotion="+ReduceMotion+"\nprofile="+ManualProfile+"\ncloseToTray="+CloseToTray+"\nautoRecover="+AutoRecover+"\nreconnectOnChange="+ReconnectOnChange+"\nnotifications="+Notifications+"\nautoConnect="+AutoConnect+"\ntrayExplained="+TrayExplained+"\n");
     }
 }
 }

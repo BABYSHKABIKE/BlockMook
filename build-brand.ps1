@@ -2,7 +2,7 @@ $ErrorActionPreference='Stop'
 Add-Type -AssemblyName PresentationCore,WindowsBase,PresentationFramework
 $taskSvg=[xml][IO.File]::ReadAllText((Join-Path $PSScriptRoot 'assets\mark.svg'))
 $taskGeometry=[Windows.Media.Geometry]::Parse($taskSvg.svg.path.d)
-$taskAccent=[Windows.Media.BrushConverter]::new().ConvertFromString('#81D8D0')
+$taskAccent=[Windows.Media.BrushConverter]::new().ConvertFromString('#00E8D2')
 $taskBackground=[Windows.Media.BrushConverter]::new().ConvertFromString('#0C1012')
 $taskImages=@()
 foreach($taskSize in @(16,20,24,32,48,64,256)){

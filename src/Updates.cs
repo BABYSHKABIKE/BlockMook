@@ -15,12 +15,14 @@ using System.Web.Script.Serialization;
 namespace BlockMook {
 internal sealed class ReleaseInfo {
     internal Version Version;
-    internal string Notes,Url,Digest;
+    internal string Notes,Url,Digest,Tag;
     internal long Size;
 }
 
 internal static class Updates {
-    internal const string CurrentVersion="1.2.0";
+    internal const string CurrentVersion="1.0.0";
+    internal const string DisplayVersion="1.0";
+    internal static readonly bool DevelopmentBuild=false;
     internal const string Repository="BABYSHKABIKE/BlockMook";
     internal const string AssetName="BlockMook-Windows-x64.zip";
     internal const long MaxDownload=100*1024*1024;
@@ -29,9 +31,9 @@ internal static class Updates {
 
     internal static Version ReadVersion(string text) {
         Version result;
-        if(text==null || !Regex.IsMatch(text,@"^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$") || !Version.TryParse(text.TrimStart('v'),out result))
+        if(text==null || !Regex.IsMatch(text,@"^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?$") || !Version.TryParse(text.TrimStart('v'),out result))
             throw new InvalidDataException("Релиз содержит неизвестный формат версии.");
-        return result;
+        return new Version(result.Major,result.Minor,Math.Max(0,result.Build));
     }
 
     private static string StringField(IDictionary<string,object> obj,string name) {
@@ -45,7 +47,7 @@ internal static class Updates {
         object draft,preview,assets;
         if(!root.TryGetValue("draft",out draft)||!(draft is bool)||!root.TryGetValue("prerelease",out preview)||!(preview is bool)||(bool)draft||(bool)preview)
             throw new InvalidDataException("Доступны только стабильные опубликованные версии.");
-        var version=ReadVersion(StringField(root,"tag_name"));
+        string tag=StringField(root,"tag_name");var version=ReadVersion(tag);
         if(!root.TryGetValue("assets",out assets)||!(assets is IEnumerable))throw new InvalidDataException("У релиза нет файлов.");
         ReleaseInfo result=null;
         foreach(object item in (IEnumerable)assets) {
@@ -53,7 +55,7 @@ internal static class Updates {
             if(asset==null||StringField(asset,"name")!=AssetName)continue;
             if(result!=null)throw new InvalidDataException("У релиза несколько архивов с одним именем.");
             string url=StringField(asset,"browser_download_url"),digest=StringField(asset,"digest");
-            string expected=RepoUrl+"/releases/download/v"+version.ToString(3)+"/"+AssetName;
+            string expected=RepoUrl+"/releases/download/"+tag+"/"+AssetName;
             if(url!=expected)throw new InvalidDataException("Адрес загрузки не принадлежит релизу BlockMook.");
             if(StringField(asset,"state")!="uploaded"||digest==null||!Regex.IsMatch(digest,@"^sha256:[a-fA-F0-9]{64}$"))
                 throw new InvalidDataException("У архива пока нет подтверждённой контрольной суммы. Попробуй позже.");
@@ -61,7 +63,7 @@ internal static class Updates {
             if(!asset.TryGetValue("size",out sizeValue)||!Int64.TryParse(Convert.ToString(sizeValue,System.Globalization.CultureInfo.InvariantCulture),out size)||size<=0||size>MaxDownload)
                 throw new InvalidDataException("Недопустимый размер обновления.");
             string notes=StringField(root,"body")??"Описание изменений отсутствует.";
-            result=new ReleaseInfo {Version=version,Url=url,Digest=digest.Substring(7),Size=size,Notes=notes.Length>16000?notes.Substring(0,16000)+"…":notes};
+            result=new ReleaseInfo {Version=version,Tag=tag,Url=url,Digest=digest.Substring(7),Size=size,Notes=notes.Length>16000?notes.Substring(0,16000)+"…":notes};
         }
         if(result==null)throw new InvalidDataException("Архив для Windows ещё не опубликован.");
         return result;
@@ -111,34 +113,41 @@ internal static class Updates {
         }
     }
 
-    internal static async Task<string> Download(ReleaseInfo release,IProgress<int> progress,CancellationToken token) {
-        string expected=RepoUrl+"/releases/download/v"+release.Version.ToString(3)+"/"+AssetName;
-        if(release.Url!=expected)throw new InvalidDataException("Неизвестный источник обновления.");
-        string folder=Path.Combine(Core.DataRoot,"Updates",release.Version.ToString(3));Directory.CreateDirectory(folder);
-        string partial=Path.Combine(folder,Guid.NewGuid().ToString("N")+".partial"),final=Path.Combine(folder,AssetName);
+    internal static async Task<string> SaveDownload(Stream input,string folder,long size,string digest,IProgress<int> progress,CancellationToken token) {
+        token.ThrowIfCancellationRequested();
+        string destination=Path.Combine(folder,Guid.NewGuid().ToString("N"));Directory.CreateDirectory(destination);
+        string final=Path.Combine(destination,AssetName);bool created=false,complete=false;
         try {
-            using(var client=Client()) {
-                var url=new Uri(release.Url);
-                for(int redirects=0;redirects<=5;redirects++) {
-                    if(!AllowedRedirect(url))throw new InvalidDataException("GitHub перенаправил загрузку на неизвестный сервер.");
-                    using(var response=await client.GetAsync(url,HttpCompletionOption.ResponseHeadersRead,token)) {
-                        int code=(int)response.StatusCode;
-                        if(code==301||code==302||code==303||code==307||code==308) {
-                            if(response.Headers.Location==null)throw new InvalidDataException("Нет адреса загрузки.");
-                            url=new Uri(url,response.Headers.Location);continue;
-                        }
-                        response.EnsureSuccessStatusCode();
-                        using(var input=await response.Content.ReadAsStreamAsync())
-                        using(var output=new FileStream(partial,FileMode.CreateNew,FileAccess.Write,FileShare.None,65536,true))
-                            await CopyVerified(input,output,release.Size,release.Digest,progress,token);
-                        token.ThrowIfCancellationRequested();
-                        if(File.Exists(final))File.Replace(partial,final,null);else File.Move(partial,final);
-                        return final;
-                    }
-                }
-                throw new IOException("Слишком много перенаправлений при загрузке.");
+            // A unique file needs no rename/replace, which can fail in EFS folders.
+            using(var output=new FileStream(final,FileMode.CreateNew,FileAccess.Write,FileShare.None,65536,true)) {
+                created=true;await CopyVerified(input,output,size,digest,progress,token);output.Flush(true);
             }
-        } finally {if(File.Exists(partial))File.Delete(partial);}
+            token.ThrowIfCancellationRequested();complete=true;return final;
+        } finally {if(created&&!complete)File.Delete(final);}
+    }
+
+    internal static async Task<string> Download(ReleaseInfo release,IProgress<int> progress,CancellationToken token) {
+        if(ReadVersion(release.Tag)!=release.Version)throw new InvalidDataException("Версия и тег обновления не совпадают.");
+        string expected=RepoUrl+"/releases/download/"+release.Tag+"/"+AssetName;
+        if(release.Url!=expected)throw new InvalidDataException("Неизвестный источник обновления.");
+        string folder=Path.Combine(Core.DataRoot,"Updates",release.Version.ToString(3));
+        using(var client=Client()) {
+            var url=new Uri(release.Url);
+            for(int redirects=0;redirects<=5;redirects++) {
+                if(!AllowedRedirect(url))throw new InvalidDataException("GitHub перенаправил загрузку на неизвестный сервер.");
+                using(var response=await client.GetAsync(url,HttpCompletionOption.ResponseHeadersRead,token)) {
+                    int code=(int)response.StatusCode;
+                    if(code==301||code==302||code==303||code==307||code==308) {
+                        if(response.Headers.Location==null)throw new InvalidDataException("Нет адреса загрузки.");
+                        url=new Uri(url,response.Headers.Location);continue;
+                    }
+                    response.EnsureSuccessStatusCode();
+                    using(var input=await response.Content.ReadAsStreamAsync())
+                        return await SaveDownload(input,folder,release.Size,release.Digest,progress,token);
+                }
+            }
+            throw new IOException("Слишком много перенаправлений при загрузке.");
+        }
     }
 }
 }

@@ -26,22 +26,23 @@ internal static class Program {
                 File.WriteAllLines(args[1],new[]{"Environment: "+(Core.Conflict()??"No known conflict")}.Concat(results.SelectMany(r=>new[]{Probes.Urls[r.Index]+" | "+r.Ok+" | "+r.Detail}.Concat(r.Checks))));
                 return 0;
             }
-            bool created;
-            using(var mutex=new Mutex(true,"Local\\BlockMook-Desktop-"+System.Security.Principal.WindowsIdentity.GetCurrent().User.Value,out created)) {
+            bool smoke=args.Length==2&&args[0]=="--ui-smoke",created;
+            using(var mutex=new Mutex(true,InstanceMutexName(smoke),out created)) {
                 if(!created) { if(!args.Contains("--startup")&&!InstanceSignal.ShowExisting())MessageBox.Show("BlockMook уже запускается. Повтори открытие через несколько секунд.","BlockMook");return 0; }
                 var app=new Application();
-                var controller=new MainWindow(args.Length==2 && args[0]=="--ui-smoke");
-                if(args.Length==2 && args[0]=="--ui-smoke") controller.SmokePath=args[1];
+                var controller=new MainWindow(smoke);
+                if(smoke) controller.SmokePath=args[1];
                 controller.StartupLaunch=args.Contains("--startup");
                 app.Run(controller.Window);
             }
             return 0;
         } catch(Exception ex) {
             if(args.Length>0 && args[0]=="--worker") return 1;
-            if(args.Length==2 && (args[0]=="--test" || args[0]=="--probe" || args[0]=="--engine-test")) { File.WriteAllText(args[1],"FAIL: "+ex); return 1; }
+            if(args.Length==2 && (args[0]=="--test" || args[0]=="--probe" || args[0]=="--engine-test" || args[0]=="--ui-smoke")) { File.WriteAllText(args[1],"FAIL: "+ex); return 1; }
             MessageBox.Show(ex.Message,"BlockMook · ошибка",MessageBoxButton.OK,MessageBoxImage.Error); return 1;
         }
     }
+    internal static string InstanceMutexName(bool smoke){return "Local\\BlockMook-Desktop-"+System.Security.Principal.WindowsIdentity.GetCurrent().User.Value+(smoke?"-Smoke-"+Guid.NewGuid().ToString("N"):"");}
 }
 internal sealed partial class MainWindow {
     internal Window Window;
@@ -72,6 +73,8 @@ internal sealed partial class MainWindow {
         profiles=Enumerable.Range(0,3).Select(i=>Find<Button>("Profile"+i)).ToArray();
         SetupUi(smoke);
         SetupDesktop();
+        SetupChrome();
+        SetupNetwork();
         manualProfile=preferences.ManualProfile>=0;profile=manualProfile?preferences.ManualProfile:Core.LoadProfile(Mask); PaintProfile();
         connect.Click+=async(s,e)=>await UserToggle();
         auto.Click+=(s,e)=>{manualProfile=false;preferences.ManualProfile=-1;profile=Core.LoadProfile(Mask);PaintProfile();SavePreferences();};
@@ -84,7 +87,7 @@ internal sealed partial class MainWindow {
         discord.Click+=(s,e)=>ServicesChanged(discord);
         Window.SourceInitialized+=(s,e)=>{int dark=1; Native.DwmSetWindowAttribute(new WindowInteropHelper(Window).Handle,20,ref dark,4);};
         Window.Loaded+=(s,e)=> {
-            try { Core.VerifyEngine(); Write("Компоненты zapret найдены и совпадают с хешами сборки."); } catch(Exception ex) { Write(ex.Message); detail.Text=ex.Message; }
+            try { Core.VerifyEngine(); Write("Сетевые компоненты найдены и совпадают с хешами сборки."); } catch(Exception ex) { Write(ex.Message); detail.Text=ex.Message; }
             UpdateEnvironment(); Controls();if(!isSmoke)timer.Start();
             if(!isSmoke&&StartupLaunch&&preferences.WelcomeDone)Post(async()=>{if(preferences.CloseToTray)Window.Hide();if(preferences.AutoConnect){RestoreWindow();await UserToggle();}});
             if(!preferences.WelcomeDone && SmokePath==null)ShowWelcome();
@@ -100,9 +103,9 @@ internal sealed partial class MainWindow {
     }
     private int Mask {get{return Services.Items.Where(s=>ServiceControl(s).IsChecked==true).Sum(s=>s.Bit);}}
     private void Write(string message) { if(closing)return; log.AppendText(DateTime.Now.ToString("HH:mm:ss")+"  "+message+Environment.NewLine); if(log.Text.Length>14000)log.Text=log.Text.Substring(log.Text.Length-10000);log.ScrollToEnd(); }
-    private void UpdateEnvironment() { string conflict=Core.Conflict();environment.Text=conflict==null?"":"Обнаружен другой VPN или zapret. Отключи его перед подключением.";environment.ToolTip=conflict;Find<FrameworkElement>("EnvironmentBanner").Visibility=conflict==null?Visibility.Collapsed:Visibility.Visible; }
-    private void PaintProfile() { profileName.Text=(manualProfile?"Вручную · ":"Автоматически · ")+Core.Names[profile];for(int i=0;i<3;i++)profiles[i].Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile&&i==profile?"#3881D8D0":"#2281D8D0"));auto.Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile?"#2281D8D0":"#3881D8D0")); }
-    private void Controls() { PaintDesktop(); Find<TextBlock>("ConnectionBadge").Text=connectionCancellation!=null?"ПОДКЛЮЧАЕМ":diagnosticCancellation!=null?"ДИАГНОСТИКА":running?"ДОСТУП ВКЛЮЧЁН":"НЕ ПОДКЛЮЧЕНО"; connect.IsEnabled=!exitRequested&&(!busy||connectionCancellation!=null||healthChecking);auto.IsEnabled=!busy&&!running&&!recovery.Wanted;probe.IsEnabled=!busy;diagnostic.IsEnabled=!busy;foreach(var service in Services.Items)ServiceControl(service).IsEnabled=!busy&&!running&&!recovery.Wanted;Find<Button>("AddService").IsEnabled=!busy&&!running&&!recovery.Wanted;Find<Button>("ShowWelcome").IsEnabled=!busy&&!running&&!recovery.Wanted;foreach(var p in profiles)p.IsEnabled=!busy&&!running&&!recovery.Wanted;connect.Content=connectionCancellation!=null?"Отменить":running||recovery.Wanted?"Отключить":"Подключить";Find<System.Windows.Shapes.Ellipse>("StateDot").Fill=new SolidColorBrush((Color)ColorConverter.ConvertFromString(running?"#81D8D0":busy?"#C6C9CC":"#80838A")); }
+    private void UpdateEnvironment() { string conflict=Core.Conflict();environment.Text=conflict==null?"":"Обнаружен другой VPN или другой сетевой инструмент. Отключи его перед подключением.";environment.ToolTip=conflict;Find<FrameworkElement>("EnvironmentBanner").Visibility=conflict==null?Visibility.Collapsed:Visibility.Visible; }
+    private void PaintProfile() { profileName.Text=(manualProfile?"Вручную · ":"Автоматически · ")+Core.Names[profile];for(int i=0;i<3;i++)profiles[i].Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile&&i==profile?"#3800E8D2":"#2200E8D2"));auto.Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile?"#2200E8D2":"#3800E8D2")); }
+    private void Controls() { ObserveConnectionState();PaintDesktop(); Find<TextBlock>("ConnectionBadge").Text=connectionCancellation!=null?"ПОДКЛЮЧАЕМ":diagnosticCancellation!=null?"ДИАГНОСТИКА":running?"ДОСТУП ВКЛЮЧЁН":"НЕ ПОДКЛЮЧЕНО"; connect.IsEnabled=!exitRequested&&(!busy||connectionCancellation!=null||healthChecking);auto.IsEnabled=!busy&&!running&&!recovery.Wanted;probe.IsEnabled=!busy;diagnostic.IsEnabled=!busy;foreach(var service in Services.Items)ServiceControl(service).IsEnabled=!busy&&!running&&!recovery.Wanted;Find<Button>("AddService").IsEnabled=!busy&&!running&&!recovery.Wanted;Find<Button>("ShowWelcome").IsEnabled=!busy&&!running&&!recovery.Wanted;foreach(var p in profiles)p.IsEnabled=!busy&&!running&&!recovery.Wanted;connect.Content=connectionCancellation!=null?"Отменить":running||recovery.Wanted?"Отключить":"Подключить";Find<System.Windows.Shapes.Ellipse>("StateDot").Fill=new SolidColorBrush((Color)ColorConverter.ConvertFromString(running?"#00E8D2":busy?"#C6C9CC":"#80838A")); }
     private async Task RunDiagnostic() {
         recovery.Stop();
         if(running)await Stop();
@@ -155,7 +158,7 @@ internal sealed partial class MainWindow {
         probeTime.Text="Проверяем · до 10 секунд";
         var values=await Probes.All(Mask,connectionCancellation!=null?connectionCancellation.Token:quickCancellation!=null?quickCancellation.Token:lifetime.Token);
         if(closing)return values;
-        foreach(var value in values){results[value.Index].Text=value.Ok?(value.Index>=3?"TLS: доступен":"Доступен"):"Не подтверждён";results[value.Index].Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(value.Ok?"#81D8D0":"#C6C9CC"));results[value.Index].ToolTip=value.Detail+"\n"+String.Join("\n",value.Checks);Write(Services.ProbeName(value.Index)+": "+value.Detail);foreach(string check in value.Checks)Write(check);}
+        foreach(var value in values){results[value.Index].Text=value.Ok?(value.Index>=3?"TLS: доступен":"Доступен"):"Не подтверждён";results[value.Index].Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(value.Ok?"#00E8D2":"#C6C9CC"));results[value.Index].ToolTip=value.Detail+"\n"+String.Join("\n",value.Checks);Write(Services.ProbeName(value.Index)+": "+value.Detail);foreach(string check in value.Checks)Write(check);}
         Find<TextBlock>("ProbeDetails").Text=String.Join("\n\n",values.Select(v=>Services.ProbeName(v.Index)+" · "+v.Detail+"\n"+String.Join("\n",v.Checks)));
         PaintDiagnostic(values,conflict!=null);
         probeTime.Text="Проверено в "+DateTime.Now.ToString("HH:mm")+(conflict!=null?" · другой VPN активен":"");

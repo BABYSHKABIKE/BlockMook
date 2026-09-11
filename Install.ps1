@@ -6,8 +6,9 @@ if(-not (Test-Path -LiteralPath $taskManifest)){throw 'Run Install.cmd from the 
 $taskVersion=[Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $taskSource 'app\BlockMook.exe')).FileVersion
 if($taskVersion -notmatch '^([0-9]+\.[0-9]+\.[0-9]+)\.0$'){throw 'Invalid application version'}
 $taskVersion=$Matches[1]
+$taskBuildHash=(Get-FileHash -LiteralPath (Join-Path $taskSource 'app\BlockMook.exe') -Algorithm SHA256).Hash.Substring(0,12).ToLowerInvariant()
 $taskBase=[IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Programs\BlockMook\versions'))
-$taskTarget=[IO.Path]::GetFullPath((Join-Path $taskBase $taskVersion))
+$taskTarget=[IO.Path]::GetFullPath((Join-Path $taskBase ($taskVersion+'-'+$taskBuildHash)))
 if(-not $taskTarget.StartsWith($taskBase+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'Install target outside BlockMook versions'}
 $taskEntries=@()
 foreach($taskLine in Get-Content -LiteralPath $taskManifest){
