@@ -29,7 +29,7 @@ internal static class ConnectionFlow {
             if(best>=0){
                 token.ThrowIfCancellationRequested();log("Повторный запуск частично работающего профиля: "+Core.Names[best]);await start(best);
                 var values=await probe();sample(best,values);token.ThrowIfCancellationRequested();
-                if(Probes.ControlOk(values)&&Probes.Score(values,mask)>0){log("Доступ подтверждён частично. Профиль оставлен включённым; все сервисы рабочими не объявляются.");keep=true;return new ConnectionOutcome{Running=true,Verified=false,Profile=best,Results=values};}
+                if(Probes.ControlOk(values)&&Probes.Score(values,mask)>0){log("Часть сервисов недоступна. Профиль подключения оставлен включённым.");keep=true;return new ConnectionOutcome{Running=true,Verified=false,Profile=best,Results=values};}
             }
             await stop();log("Рабочий профиль не подтверждён. Обход выключен.");return new ConnectionOutcome();
         }finally{if(!keep)abort();}

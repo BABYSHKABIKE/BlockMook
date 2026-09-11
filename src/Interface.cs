@@ -33,10 +33,10 @@ internal sealed partial class MainWindow {
     }
     private void SavePreferences() {
         if(isSmoke)return;
-        try {preferences.Save(Preferences.DefaultPath);}catch(Exception ex){Write("Не удалось сохранить настройки: "+ex.Message);detail.Text="Настройки не сохранились. Подробности — в журнале раздела «Помощь».";}
+        try {preferences.Save(Preferences.DefaultPath);}catch(Exception ex){Write("Не удалось сохранить настройки: "+ex.Message);detail.Text="Настройки не сохранились. Подробности — в журнале раздела «О приложении».";}
     }
     private void ServicesChanged(CheckBox changed) {
-        if(Mask==0){changed.IsChecked=true;detail.Text="Оставь выбранным хотя бы один сервис.";}
+        if(Mask==0){changed.IsChecked=true;detail.Text="Необходимо выбрать хотя бы один сервис.";}
         preferences.Services=Mask;PaintServices();ResetChecks();
         if(!manualProfile){profile=Core.LoadProfile(Mask);PaintProfile();}
         SavePreferences();
@@ -56,8 +56,8 @@ internal sealed partial class MainWindow {
     }
     private void PaintWelcome() {
         Find<TextBlock>("WelcomeProgress").Text="0"+(welcomeStep+1)+" / 03";
-        Find<TextBlock>("WelcomeTitle").Text=new[]{"Привет, это BlockMook.","Твои сервисы. Твой выбор.","Всё готово к старту."}[welcomeStep];
-        Find<TextBlock>("WelcomeText").Text=new[]{"YouTube, Discord и дополнительные сервисы из каталога. BlockMook подбирает способ подключения и проверяет соединения.","Выбери нужные сервисы. Другие сервисы, включая Google Meet, добавляются через «Добавить сервис» на главном экране.","Отключи другой VPN или другой сетевой инструмент, затем нажми «Подключить». Windows запросит права администратора. Крестик предложит убрать окно в трей или закрыть BlockMook полностью."}[welcomeStep];
+        Find<TextBlock>("WelcomeTitle").Text=new[]{"Настройка BlockMook","Выбор сервисов","Первое подключение"}[welcomeStep];
+        Find<TextBlock>("WelcomeText").Text=new[]{"Выберите сервисы для подключения. BlockMook подберёт профиль и проверит доступность выбранных сервисов.","Выберите сервисы. Полный список доступен по кнопке «Добавить сервис» на экране подключения.","Нажмите «Подключить» и подтвердите запрос прав администратора. Если активен другой VPN или сетевой инструмент, сначала отключите его. При закрытии окна можно продолжить работу в трее или завершить приложение."}[welcomeStep];
         Find<FrameworkElement>("WelcomeServices").Visibility=welcomeStep==1?Visibility.Visible:Visibility.Collapsed;
         Find<Button>("WelcomeBack").Visibility=welcomeStep==0?Visibility.Hidden:Visibility.Visible;
         Find<Button>("WelcomeNext").Content=welcomeStep==2?"Начать":"Далее";
@@ -83,7 +83,7 @@ internal sealed partial class MainWindow {
         Find<CheckBox>("WelcomeYouTube").IsChecked=false;Find<CheckBox>("WelcomeYouTube").RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));UiAssert(Mask==1&&Find<CheckBox>("WelcomeYouTube").IsChecked==true,"last service retained");
         UiClick("WelcomeBack");UiAssert(welcomeStep==0,"back");UiClick("WelcomeSkip");UiAssert(Find<FrameworkElement>("Welcome").Visibility==Visibility.Collapsed&&Find<FrameworkElement>("AppContent").IsEnabled&&preferences.WelcomeDone,"skip closes and completes");
         UiClick("ShowWelcome");UiClick("WelcomeNext");UiClick("WelcomeNext");UiClick("WelcomeNext");UiAssert(Find<FrameworkElement>("Welcome").Visibility==Visibility.Collapsed,"finish closes");
-        youtube.IsChecked=discord.IsChecked=true;preferences.Services=3;detail.Text="Выбери сервисы и нажми «Подключить».";
+        youtube.IsChecked=discord.IsChecked=true;preferences.Services=3;detail.Text="Выберите сервисы и нажмите «Подключить».";
         PaintServices();TestCatalogUi();
         TestDesktopUi();TestNetworkUi();
         Window.Width=Window.MinWidth;Window.Height=Window.MinHeight;

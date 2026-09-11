@@ -74,7 +74,7 @@ internal static class ServiceChecks {
                     bool ok=ValidStun(request,receive.Result.Buffer);
                     return new CheckResult{Ok=ok,Detail=ok?"UDP/STUN · сервер Meet ответил; качество звонка не проверено":"UDP/STUN · ответ не прошёл проверку"};
                 }
-            }catch(Exception ex){token.ThrowIfCancellationRequested();return new CheckResult{Detail="UDP/STUN · "+(deadline.IsCancellationRequested?"нет ответа за 8 с":ex.GetBaseException().Message)+". Meet может использовать TLS; проверь звонок."};}
+            }catch(Exception ex){token.ThrowIfCancellationRequested();return new CheckResult{Detail="UDP/STUN · "+(deadline.IsCancellationRequested?"нет ответа за 8 с":ex.GetBaseException().Message)+". Meet может использовать TLS; проверьте звонок."};}
         }
     }
     internal static async Task<ProbeResult> Run(int index,CancellationToken token){

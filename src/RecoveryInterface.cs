@@ -38,7 +38,7 @@ internal sealed partial class MainWindow {
             catch(Exception ex){bridge.Dispose();running=false;Write(ex.Message);}
         }
         if(!recovery.Wanted||!preferences.AutoRecover||recovery.Paused){if(!running)UpdateEnvironment();return;}
-        if(!bridge.Connected){RecoveryPaused("Нужно заново подтвердить запуск сетевого компонента. Нажми «Отключить», затем «Подключить».");return;}
+        if(!bridge.Connected){RecoveryPaused("Нужно заново подтвердить запуск сетевого компонента. Нажмите «Отключить», затем «Подключить».");return;}
         DateTime now=DateTime.UtcNow;if(now<recovery.NextCheck)return;
         if(!NetworkInterface.GetIsNetworkAvailable()){recovery.NextCheck=now.AddSeconds(30);Find<System.Windows.Controls.TextBlock>("RecoveryStatus").Text="Ждём подключения компьютера к интернету.";return;}
         string conflict=await bridge.Send("CONFLICT");
@@ -63,7 +63,7 @@ internal sealed partial class MainWindow {
         Find<System.Windows.Controls.TextBlock>("RecoveryStatus").Text=recovery.Failures==0?"Соединение проверено · "+DateTime.Now.ToString("HH:mm"):"Неудачных проверок подряд: "+recovery.Failures+" из 3";
         if(!preferences.AutoRecover||!recovery.Wanted||exitRequested)return;
         if(!recovery.BeginAttempt(now)){
-            if(recovery.Paused)NotifyFailure("Лимит восстановления исчерпан. Открой диагностику или подключись вручную.");
+            if(recovery.Paused)NotifyFailure("Лимит восстановления исчерпан. Откройте диагностику или подключитесь вручную.");
             return;
         }
         recovering=true;Controls();
@@ -75,9 +75,9 @@ internal sealed partial class MainWindow {
             Find<System.Windows.Controls.TextBlock>("RecoveryStatus").Text=running&&lastConnectionHealthy?"Соединение восстановлено · "+DateTime.Now.ToString("HH:mm"):"Восстановление не подтверждено.";
         }catch(Exception ex){
             bridge.Dispose();running=false;recovery.Finished(DateTime.UtcNow,false);Write("Восстановление: "+ex.Message);
-            if(!exitRequested&&recovery.Wanted)RecoveryPaused("Восстановление остановлено. Открой диагностику или подключись вручную.");
+            if(!exitRequested&&recovery.Wanted)RecoveryPaused("Восстановление остановлено. Откройте диагностику или подключитесь вручную.");
         }finally{recovering=false;}
-        if(recovery.Paused&&!exitRequested&&recovery.Wanted)NotifyFailure("Соединение не восстановилось. Открой диагностику.");
+        if(recovery.Paused&&!exitRequested&&recovery.Wanted)NotifyFailure("Соединение не восстановилось. Откройте диагностику.");
     }
 }
 }

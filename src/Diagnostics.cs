@@ -50,7 +50,7 @@ internal static class Diagnostics {
             progress("Проверка без обхода…");
             report.Sample("Без обхода",await probe(),mask);
             CheckConflict(conflict,token);
-            progress("Подтверди запрос Windows для проверки стратегий");
+            progress("Подтвердите запрос Windows для проверки стратегий");
             await prepare();
             token.ThrowIfCancellationRequested();
             for(int i=0;i<Core.Names.Length;i++) {

@@ -119,7 +119,6 @@ internal sealed partial class MainWindow {
     private void NotifyFailure(string message){if(tray==null||!preferences.Notifications||exitRequested)return;tray.ShowBalloonTip(7000,"BlockMook · требуется внимание",message,Forms.ToolTipIcon.Warning);}
     private void PaintDesktop(){
         Find<CheckBox>("ReconnectOnChange").IsEnabled=preferences.AutoRecover;
-        Find<TextBlock>("CloseHint").Text="Крестик: убрать в трей или закрыть полностью";
         Find<Button>("QuickDiagnostic").IsEnabled=!busy&&!exitRequested;
         if(tray==null)return;
         string status=recovering?"восстановление":recovery.Paused?"нужна проверка":running?"подключён":"отключён";

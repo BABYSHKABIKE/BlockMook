@@ -63,12 +63,12 @@ internal static class Core {
             var processes = Process.GetProcessesByName(name);
             bool found = processes.Any(p=>p.Id!=ownedWinwsPid);
             foreach (var p in processes) p.Dispose();
-            if (found) return "Уже работает " + name + ". Отключи его в своей программе, затем повтори запуск.";
+            if (found) return "Уже работает " + name + ". Отключите его в своей программе, затем повторите запуск.";
         }
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces()) {
             string text = (nic.Name + " " + nic.Description).ToLowerInvariant();
             if (nic.OperationalStatus == OperationalStatus.Up && (text.Contains("happ-tun") || text.Contains("wintun") || text.Contains("wireguard")))
-                return "Активен VPN-интерфейс " + nic.Name + ". Отключи VPN для отдельной проверки BlockMook.";
+                return "Активен VPN-интерфейс " + nic.Name + ". Отключите VPN для отдельной проверки BlockMook.";
         }
         return null;
     }

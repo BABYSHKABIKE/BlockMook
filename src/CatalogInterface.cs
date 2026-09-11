@@ -28,7 +28,7 @@ internal sealed partial class MainWindow {
     }
     private void ResetChecks(){
         foreach(var result in results){result.Text="—";result.ToolTip=null;result.Foreground=Brushes.LightGray;}
-        shareableReport=null;Find<Button>("ExportDiagnostic").IsEnabled=false;Find<TextBox>("DiagnosticPreview").Text="Выбор сервисов изменён. Выполни новую проверку.";
+        shareableReport=null;Find<Button>("ExportDiagnostic").IsEnabled=false;Find<TextBox>("DiagnosticPreview").Text="Выбор сервисов изменён. Выполните проверку повторно.";
         probeTime.Text="Выбор изменён · нужна проверка";
         Find<TextBlock>("ProbeDetails").Text="Проверка соединений не заменяет проверку видео, сообщений и звонков в приложении.";
     }
@@ -40,7 +40,7 @@ internal sealed partial class MainWindow {
     private void CloseCatalog(){Find<Grid>("Catalog").Visibility=Visibility.Collapsed;Find<Grid>("AppContent").IsEnabled=true;Find<Button>("AddService").Focus();}
     private void CatalogCount(){
         int count=Services.Items.Count(s=>(catalogMask&s.Bit)!=0);
-        Find<TextBlock>("CatalogCount").Text=count==0?"Выбери хотя бы один сервис":"Выбрано: "+count;
+        Find<TextBlock>("CatalogCount").Text=count==0?"Выберите хотя бы один сервис":"Выбрано: "+count;
         Find<Button>("CatalogApply").IsEnabled=count>0&&!busy&&!running;
     }
     private void PaintCatalog(){
@@ -66,6 +66,9 @@ internal sealed partial class MainWindow {
         SavePreferences();PaintServices();ResetChecks();CloseCatalog();
     }
     private void TestCatalogUi(){
+        Controls();UiAssert(Find<FrameworkElement>("ServiceEditHint").Visibility==Visibility.Collapsed,"editable service list has no restriction hint");
+        busy=true;Controls();UiAssert(!Find<Button>("AddService").IsEnabled&&Find<FrameworkElement>("ServiceEditHint").Visibility==Visibility.Visible,"locked service list explains restriction");
+        busy=false;Controls();UiAssert(Find<Button>("AddService").IsEnabled&&Find<FrameworkElement>("ServiceEditHint").Visibility==Visibility.Collapsed,"restriction hint clears after operation");
         ShowCatalog();UiAssert(!Find<Grid>("AppContent").IsEnabled,"catalog modal");CaptureUi("-Catalog");
         Find<TextBox>("CatalogSearch").Text="meet";UiAssert(Find<StackPanel>("CatalogRows").Children.Count==1,"catalog search");
         var row=(Border)Find<StackPanel>("CatalogRows").Children[0];var toggle=(CheckBox)row.Child;

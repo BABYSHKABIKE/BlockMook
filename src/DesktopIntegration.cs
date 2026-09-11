@@ -33,7 +33,7 @@ internal static class DesktopIntegration {
             var shortcutType=shortcut.GetType();
             if(File.Exists(path)){
                 string target=shortcutType.InvokeMember("TargetPath",BindingFlags.GetProperty,null,shortcut,null) as string;
-                if(!String.Equals(target,Executable,StringComparison.OrdinalIgnoreCase))throw new IOException("Ярлык BlockMook уже ведёт в другую папку. Сохрани его или переименуй перед созданием нового.");
+                if(!String.Equals(target,Executable,StringComparison.OrdinalIgnoreCase))throw new IOException("Ярлык BlockMook уже ведёт в другую папку. Сохраните его или переименуйте перед созданием нового.");
             }
             shortcutType.InvokeMember("TargetPath",BindingFlags.SetProperty,null,shortcut,new object[]{Executable});
             shortcutType.InvokeMember("WorkingDirectory",BindingFlags.SetProperty,null,shortcut,new object[]{Path.GetDirectoryName(Executable)});

@@ -19,7 +19,7 @@ internal static class DiagnosticSummary {
             text.AppendLine(service.Name+": "+(result==null?"не проверен":result.Ok?(service.Index>=3?"TLS подтверждён":"проверки соединения пройдены"):"соединение не подтверждено"));
         }
         text.AppendLine();
-        text.AppendLine(!Probes.ControlOk(values)?"Что сделать: проверь другие сайты и подключение Windows к сети.":Probes.AllSelected(values,mask)?"Что сделать: открой сервис и проверь нужное действие — видео, сообщение или звонок.":"Что сделать: попробуй автоматический подбор. Если проблема остаётся — запусти проверку профилей ниже.");
+        text.AppendLine(!Probes.ControlOk(values)?"Рекомендация: проверьте другие сайты и подключение Windows к сети.":Probes.AllSelected(values,mask)?"Рекомендация: откройте сервис и проверьте нужное действие — видео, сообщение или звонок.":"Рекомендация: включите автоматический подбор профиля. Если проблема остаётся — запустите проверку профилей ниже.");
         text.AppendLine("Вход в аккаунт, сообщения и звонки автоматически не проверяются.");
         return text.ToString();
     }
@@ -48,7 +48,7 @@ internal sealed partial class MainWindow {
     private void PaintDiagnostic(ProbeResult[] values,bool otherConnection){
         shareableReport="Время: "+DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")+"\n"+DiagnosticSummary.Build(Mask,values,otherConnection);
         Find<TextBox>("DiagnosticPreview").Text=shareableReport;
-        Find<TextBlock>("DiagnosticAdvice").Text=Probes.AllSelected(values,Mask)?"Соединения подтверждены. Проверь работу самих приложений.":"Есть неподтверждённые соединения. Рекомендации — в отчёте ниже.";
+        Find<TextBlock>("DiagnosticAdvice").Text=Probes.AllSelected(values,Mask)?"Соединения подтверждены. Проверьте работу самих приложений.":"Есть неподтверждённые соединения. Рекомендации — в отчёте ниже.";
         Find<Button>("ExportDiagnostic").IsEnabled=true;
     }
 }

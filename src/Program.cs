@@ -28,7 +28,7 @@ internal static class Program {
             }
             bool smoke=args.Length==2&&args[0]=="--ui-smoke",created;
             using(var mutex=new Mutex(true,InstanceMutexName(smoke),out created)) {
-                if(!created) { if(!args.Contains("--startup")&&!InstanceSignal.ShowExisting())MessageBox.Show("BlockMook уже запускается. Повтори открытие через несколько секунд.","BlockMook");return 0; }
+                if(!created) { if(!args.Contains("--startup")&&!InstanceSignal.ShowExisting())MessageBox.Show("BlockMook уже запускается. Повторите запуск через несколько секунд.","BlockMook");return 0; }
                 var app=new Application();
                 var controller=new MainWindow(smoke);
                 if(smoke) controller.SmokePath=args[1];
@@ -103,9 +103,9 @@ internal sealed partial class MainWindow {
     }
     private int Mask {get{return Services.Items.Where(s=>ServiceControl(s).IsChecked==true).Sum(s=>s.Bit);}}
     private void Write(string message) { if(closing)return; log.AppendText(DateTime.Now.ToString("HH:mm:ss")+"  "+message+Environment.NewLine); if(log.Text.Length>14000)log.Text=log.Text.Substring(log.Text.Length-10000);log.ScrollToEnd(); }
-    private void UpdateEnvironment() { string conflict=Core.Conflict();environment.Text=conflict==null?"":"Обнаружен другой VPN или другой сетевой инструмент. Отключи его перед подключением.";environment.ToolTip=conflict;Find<FrameworkElement>("EnvironmentBanner").Visibility=conflict==null?Visibility.Collapsed:Visibility.Visible; }
+    private void UpdateEnvironment() { string conflict=Core.Conflict();environment.Text=conflict==null?"":"Обнаружен другой VPN или другой сетевой инструмент. Отключите его перед подключением.";environment.ToolTip=conflict;Find<FrameworkElement>("EnvironmentBanner").Visibility=conflict==null?Visibility.Collapsed:Visibility.Visible; }
     private void PaintProfile() { profileName.Text=(manualProfile?"Вручную · ":"Автоматически · ")+Core.Names[profile];for(int i=0;i<3;i++)profiles[i].Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile&&i==profile?"#3800E8D2":"#2200E8D2"));auto.Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(manualProfile?"#2200E8D2":"#3800E8D2")); }
-    private void Controls() { ObserveConnectionState();PaintDesktop(); Find<TextBlock>("ConnectionBadge").Text=connectionCancellation!=null?"ПОДКЛЮЧАЕМ":diagnosticCancellation!=null?"ДИАГНОСТИКА":running?"ДОСТУП ВКЛЮЧЁН":"НЕ ПОДКЛЮЧЕНО"; connect.IsEnabled=!exitRequested&&(!busy||connectionCancellation!=null||healthChecking);auto.IsEnabled=!busy&&!running&&!recovery.Wanted;probe.IsEnabled=!busy;diagnostic.IsEnabled=!busy;foreach(var service in Services.Items)ServiceControl(service).IsEnabled=!busy&&!running&&!recovery.Wanted;Find<Button>("AddService").IsEnabled=!busy&&!running&&!recovery.Wanted;Find<Button>("ShowWelcome").IsEnabled=!busy&&!running&&!recovery.Wanted;foreach(var p in profiles)p.IsEnabled=!busy&&!running&&!recovery.Wanted;connect.Content=connectionCancellation!=null?"Отменить":running||recovery.Wanted?"Отключить":"Подключить";Find<System.Windows.Shapes.Ellipse>("StateDot").Fill=new SolidColorBrush((Color)ColorConverter.ConvertFromString(running?"#00E8D2":busy?"#C6C9CC":"#80838A")); }
+    private void Controls() { Find<FrameworkElement>("ServiceEditHint").Visibility=busy||running||recovery.Wanted?Visibility.Visible:Visibility.Collapsed; ObserveConnectionState();PaintDesktop(); Find<TextBlock>("ConnectionBadge").Text=connectionCancellation!=null?"ПОДКЛЮЧЕНИЕ":diagnosticCancellation!=null?"ДИАГНОСТИКА":running?"ДОСТУП ВКЛЮЧЁН":"НЕ ПОДКЛЮЧЕНО"; connect.IsEnabled=!exitRequested&&(!busy||connectionCancellation!=null||healthChecking);auto.IsEnabled=!busy&&!running&&!recovery.Wanted;probe.IsEnabled=!busy;diagnostic.IsEnabled=!busy;foreach(var service in Services.Items)ServiceControl(service).IsEnabled=!busy&&!running&&!recovery.Wanted;Find<Button>("AddService").IsEnabled=!busy&&!running&&!recovery.Wanted;Find<Button>("ShowWelcome").IsEnabled=!busy&&!running&&!recovery.Wanted;foreach(var p in profiles)p.IsEnabled=!busy&&!running&&!recovery.Wanted;connect.Content=connectionCancellation!=null?"Отменить":running||recovery.Wanted?"Отключить":"Подключить";Find<System.Windows.Shapes.Ellipse>("StateDot").Fill=new SolidColorBrush((Color)ColorConverter.ConvertFromString(running?"#00E8D2":busy?"#C6C9CC":"#80838A")); }
     private async Task RunDiagnostic() {
         recovery.Stop();
         if(running)await Stop();
@@ -134,28 +134,28 @@ internal sealed partial class MainWindow {
             // A failed command must not leave an untracked engine running.
             bridge.Dispose();running=false;state.Text="Не удалось выполнить";
             if(ex is OperationCanceledException)state.Text="Подключение отменено";
-            detail.Text=ex is OperationCanceledException?"Сетевой компонент остановлен. Можно повторить подключение.":ex is System.ComponentModel.Win32Exception && ((System.ComponentModel.Win32Exception)ex).NativeErrorCode==1223?"Запрос прав администратора отменён. Ничего не включено.":ex.Message;
+            detail.Text=ex is OperationCanceledException?"Сетевой компонент остановлен.":ex is System.ComponentModel.Win32Exception && ((System.ComponentModel.Win32Exception)ex).NativeErrorCode==1223?"Запрос прав администратора отменён. Подключение не запущено.":ex.Message;
             Write(detail.Text);
         } finally {busy=false;if(!closing)Controls();Post(TryCompleteExit);}
         if(userStopRequested&&!exitRequested){userStopRequested=false;await Guard(Stop);}
     }
     private void EnsureClear() { string conflict=Core.Conflict();if(conflict!=null)throw new InvalidOperationException(conflict);Core.Domains(Mask);Core.VerifyEngine(); }
     private async Task Start() {
-        if(recovering&&!bridge.Connected)throw new IOException("Нужно повторное подтверждение прав. Подключись вручную.");
-        EnsureClear();state.Text="Подключаем…";detail.Text="Подтверди запрос прав в окне Windows.";
+        if(recovering&&!bridge.Connected)throw new IOException("Нужно повторное подтверждение прав. Подключитесь вручную.");
+        EnsureClear();state.Text="Подключение…";detail.Text="Подтвердите запрос прав в окне Windows.";
         await bridge.Connect();lifetime.Token.ThrowIfCancellationRequested();if(connectionCancellation!=null)connectionCancellation.Token.ThrowIfCancellationRequested();
         if(await bridge.Send("START|"+profile+"|"+Mask)!="RUNNING")throw new IOException("Движок не подтвердил запуск");
-        running=true;state.Text="Проверяем доступ…";detail.Text="Подбираем рабочий способ подключения.";
+        running=true;state.Text="Проверка доступа…";detail.Text="Подбор профиля подключения.";
         Find<FrameworkElement>("EnvironmentBanner").Visibility=Visibility.Collapsed;Write("Запущен профиль «"+Core.Names[profile]+"».");
     }
     private async Task Stop() {
-        if(bridge.Connected)await bridge.Send("STOP");running=false;state.Text="Отключено";detail.Text="Чтобы снова открыть доступ, нажми «Подключить».";Write("Наш движок остановлен.");UpdateEnvironment();
+        if(bridge.Connected)await bridge.Send("STOP");running=false;state.Text="Отключено";detail.Text="Выберите сервисы для подключения.";Write("Сетевой компонент BlockMook остановлен.");UpdateEnvironment();
     }
     private async Task Toggle() {if(running)await Stop();else await ConnectAutomatically();}
     private async Task<ProbeResult[]> Check() {
-        foreach(var block in results){block.Text="Проверяем…";block.Foreground=Brushes.LightGray;}
+        foreach(var block in results){block.Text="Проверка…";block.Foreground=Brushes.LightGray;}
         string conflict=running?null:Core.Conflict();
-        probeTime.Text="Проверяем · до 10 секунд";
+        probeTime.Text="Проверка · до 10 секунд";
         var values=await Probes.All(Mask,connectionCancellation!=null?connectionCancellation.Token:quickCancellation!=null?quickCancellation.Token:lifetime.Token);
         if(closing)return values;
         foreach(var value in values){results[value.Index].Text=value.Ok?(value.Index>=3?"TLS: доступен":"Доступен"):"Не подтверждён";results[value.Index].Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(value.Ok?"#00E8D2":"#C6C9CC"));results[value.Index].ToolTip=value.Detail+"\n"+String.Join("\n",value.Checks);Write(Services.ProbeName(value.Index)+": "+value.Detail);foreach(string check in value.Checks)Write(check);}
@@ -181,7 +181,7 @@ internal sealed partial class MainWindow {
                 if(!running){state.Text="Доступ не подтверждён";detail.Text="Проверенные стратегии не дали подтверждённого доступа. Обход выключен; отчёт сохранён.";}
                 else{
                     state.Text=outcome.Verified?"Подключено":"Доступ частичный";
-                    detail.Text=outcome.Verified?"Соединения проверены. Видео, сообщения и звонки проверь в выбранных приложениях.":"Часть проверок не прошла. Подключение включено; подробности — в «Помощи».";
+                    detail.Text=outcome.Verified?"Соединения проверены. Видео, сообщения и звонки проверьте в выбранных приложениях.":"Часть проверок не прошла. Подключение включено; подробности — в разделе «О приложении».";
                     if(outcome.Verified)try{Core.SaveProfile(outcome.Profile,Mask);}catch(Exception ex){Write("Не удалось сохранить профиль: "+ex.Message);}
                 }
                 report.Add("ИТОГ: "+(outcome.Verified?"ПРОВЕРЕНО":running?"ЧАСТИЧНО":"НЕ ПОДТВЕРЖДЕНО"));

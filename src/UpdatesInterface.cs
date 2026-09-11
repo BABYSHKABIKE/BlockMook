@@ -19,7 +19,7 @@ internal sealed partial class MainWindow {
         Find<Button>("CheckUpdates").Click+=async(s,e)=>await UpdateOperation(false);
         Find<Button>("DownloadUpdate").Click+=async(s,e)=>await UpdateOperation(true);
         Find<Button>("CancelUpdate").Click+=(s,e)=>{if(updateCancellation!=null)updateCancellation.Cancel();};
-        Find<Button>("OpenUpdate").Click+=(s,e)=>{try{if(downloadedUpdate==null||!File.Exists(downloadedUpdate))throw new IOException("Архив перемещён. Скачай его ещё раз.");Process.Start("explorer.exe","/select,"+Core.Q(downloadedUpdate));}catch(Exception ex){Find<TextBlock>("UpdateStatus").Text=ex.Message;}};
+        Find<Button>("OpenUpdate").Click+=(s,e)=>{try{if(downloadedUpdate==null||!File.Exists(downloadedUpdate))throw new IOException("Архив перемещён. Скачайте его ещё раз.");Process.Start("explorer.exe","/select,"+Core.Q(downloadedUpdate));}catch(Exception ex){Find<TextBlock>("UpdateStatus").Text=ex.Message;}};
         Link("ReleasePage",Updates.RepoUrl+"/releases");Link("SourcePage",Updates.RepoUrl);
         Link("CreditZapret","https://github.com/bol-van/zapret");Link("CreditFlowseal","https://github.com/Flowseal/zapret-discord-youtube");
         Link("CreditWinDivert","https://github.com/basil00/WinDivert");Link("CreditCygwin","https://cygwin.com/");
@@ -34,24 +34,24 @@ internal sealed partial class MainWindow {
             Find<Button>("CancelUpdate").Visibility=Visibility.Visible;
             try {
                 if(download) {
-                    if(availableRelease==null)throw new InvalidOperationException("Сначала проверь обновления.");
+                    if(availableRelease==null)throw new InvalidOperationException("Сначала выполните проверку обновлений.");
                     Find<ProgressBar>("UpdateProgress").Value=0;Find<ProgressBar>("UpdateProgress").Visibility=Visibility.Visible;
-                    status.Text="Загружаем архив…";
-                    downloadedUpdate=await Updates.Download(availableRelease,new Progress<int>(p=>{if(updateCancellation==cancellation){Find<ProgressBar>("UpdateProgress").Value=p;status.Text=p==100?"Проверяем SHA-256…":"Загружаем · "+p+" %";}}),cancellation.Token);
+                    status.Text="Загрузка архива…";
+                    downloadedUpdate=await Updates.Download(availableRelease,new Progress<int>(p=>{if(updateCancellation==cancellation){Find<ProgressBar>("UpdateProgress").Value=p;status.Text=p==100?"Проверка SHA-256…":"Загрузка · "+p+" %";}}),cancellation.Token);
                     status.Text="Архив готов. Контрольная сумма проверена.";
                     Find<Button>("OpenUpdate").Visibility=Visibility.Visible;
                 } else {
-                    availableRelease=null;Find<Button>("DownloadUpdate").Visibility=Visibility.Collapsed;status.Text="Проверяем GitHub…";
+                    availableRelease=null;Find<Button>("DownloadUpdate").Visibility=Visibility.Collapsed;status.Text="Проверка обновлений…";
                     availableRelease=await Updates.Latest(cancellation.Token);
                     if(availableRelease==null){status.Text="Публичных релизов пока нет.";return;}
                     bool newer=availableRelease.Version>Updates.Installed;
-                    status.Text=newer?"Доступна версия "+availableRelease.Version.ToString(3):Updates.DevelopmentBuild?"Новых публичных обновлений нет. У тебя рабочая сборка BlockMook 1.0.":"У тебя актуальная версия.";
+                    status.Text=newer?"Доступна версия "+availableRelease.Version.ToString(3):Updates.DevelopmentBuild?"Новых выпусков нет. Установлена сборка для разработки.":"Установлена актуальная версия.";
                     if(newer||!Updates.DevelopmentBuild)Find<TextBlock>("ReleaseNotes").Text=availableRelease.Notes;
                     Find<Button>("DownloadUpdate").Content=newer?"Скачать "+availableRelease.Version.ToString(3):"Скачать эту версию";
                     Find<Button>("DownloadUpdate").Visibility=(newer||!Updates.DevelopmentBuild&&availableRelease.Version==Updates.Installed)?Visibility.Visible:Visibility.Collapsed;
                 }
             } catch(OperationCanceledException){status.Text="Операция отменена или время ожидания истекло. Можно повторить.";}
-            catch(Exception ex){status.Text=ex is HttpRequestException?"Не удалось связаться с GitHub. Проверь интернет и попробуй ещё раз.":ex.Message;Write("Обновления: "+ex.Message);}
+            catch(Exception ex){status.Text=ex is HttpRequestException?"Не удалось связаться с GitHub. Проверьте подключение к интернету и повторите попытку.":ex.Message;Write("Обновления: "+ex.Message);}
             finally {
                 updateCancellation=null;Find<Button>("CheckUpdates").IsEnabled=true;Find<Button>("DownloadUpdate").IsEnabled=true;
                 Find<Button>("CancelUpdate").Visibility=Visibility.Collapsed;Find<ProgressBar>("UpdateProgress").Visibility=Visibility.Collapsed;

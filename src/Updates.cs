@@ -58,7 +58,7 @@ internal static class Updates {
             string expected=RepoUrl+"/releases/download/"+tag+"/"+AssetName;
             if(url!=expected)throw new InvalidDataException("Адрес загрузки не принадлежит релизу BlockMook.");
             if(StringField(asset,"state")!="uploaded"||digest==null||!Regex.IsMatch(digest,@"^sha256:[a-fA-F0-9]{64}$"))
-                throw new InvalidDataException("У архива пока нет подтверждённой контрольной суммы. Попробуй позже.");
+                throw new InvalidDataException("У архива пока нет подтверждённой контрольной суммы. Повторите попытку позже.");
             object sizeValue;long size;
             if(!asset.TryGetValue("size",out sizeValue)||!Int64.TryParse(Convert.ToString(sizeValue,System.Globalization.CultureInfo.InvariantCulture),out size)||size<=0||size>MaxDownload)
                 throw new InvalidDataException("Недопустимый размер обновления.");
@@ -80,7 +80,7 @@ internal static class Updates {
         using(var client=Client())
         using(var response=await client.GetAsync("https://api.github.com/repos/"+Repository+"/releases/latest",HttpCompletionOption.ResponseHeadersRead,token)) {
             if(response.StatusCode==HttpStatusCode.NotFound)return null;
-            if((int)response.StatusCode==403||(int)response.StatusCode==429)throw new IOException("GitHub ограничил частоту запросов. Попробуй позже.");
+            if((int)response.StatusCode==403||(int)response.StatusCode==429)throw new IOException("GitHub ограничил частоту запросов. Повторите попытку позже.");
             response.EnsureSuccessStatusCode();
             using(var stream=await response.Content.ReadAsStreamAsync())
             using(var buffer=new MemoryStream()) {
@@ -107,7 +107,7 @@ internal static class Updates {
                 int percent=(int)(total*100/expectedSize);if(percent!=last&&progress!=null){progress.Report(percent);last=percent;}
             }
             token.ThrowIfCancellationRequested();hash.TransformFinalBlock(new byte[0],0,0);
-            if(total!=expectedSize)throw new InvalidDataException("Загрузка оборвалась. Попробуй скачать ещё раз.");
+            if(total!=expectedSize)throw new InvalidDataException("Загрузка оборвалась. Повторите загрузку.");
             string actual=BitConverter.ToString(hash.Hash).Replace("-","");
             if(!String.Equals(actual,digest,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Контрольная сумма не совпала. Архив не сохранён.");
         }
