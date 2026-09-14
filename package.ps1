@@ -1,6 +1,12 @@
 $ErrorActionPreference = 'Stop'
+$taskProductVersion=[Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $PSScriptRoot 'app\BlockMook.exe')).ProductVersion
+if($taskProductVersion -notmatch '^([0-9]+\.[0-9]+\.[0-9]+)\+build\.([1-9][0-9]{0,9})$'){throw 'Build metadata is missing. Run build.ps1 before packaging.'}
+$taskVersion=$Matches[1]
+$taskBuild=[int]$Matches[2]
+$taskUpdateSource=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'src\Updates.cs'))
+if($taskUpdateSource -notmatch ('CurrentVersion\s*=\s*"'+[regex]::Escape($taskVersion)+'"') -or
+   $taskUpdateSource -notmatch ('CurrentBuild\s*=\s*"'+$taskBuild+'"')){throw 'Application build metadata differs from source. Run build.ps1 before packaging.'}
 & (Join-Path $PSScriptRoot 'prepare-sources.ps1')
-$taskVersion = '1.0.0'
 $taskOutput = Join-Path $PSScriptRoot ('out\packages\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $taskStage = Join-Path $taskOutput 'BlockMook'
 $taskZip = Join-Path $taskOutput 'BlockMook-Windows-x64.zip'
@@ -32,5 +38,7 @@ $taskHashes = Get-ChildItem -LiteralPath $taskStage -File -Recurse | Sort-Object
 Compress-Archive -LiteralPath $taskStage -DestinationPath $taskZip -CompressionLevel Optimal
 $taskHash = (Get-FileHash -LiteralPath $taskZip -Algorithm SHA256).Hash
 [IO.File]::WriteAllText((Join-Path $taskOutput 'SHA256SUMS.txt'),$taskHash+'  BlockMook-Windows-x64.zip'+[Environment]::NewLine)
+# Place this hidden marker in the release body together with this exact ZIP.
+[IO.File]::WriteAllText((Join-Path $taskOutput 'release-build.txt'),'<!-- blockmook-build: '+$taskBuild+'; sha256: '+$taskHash.ToLowerInvariant()+' -->'+[Environment]::NewLine)
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'out\latest-package.txt'),$taskZip)
 Write-Output $taskZip

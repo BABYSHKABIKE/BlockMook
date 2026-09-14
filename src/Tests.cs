@@ -93,6 +93,7 @@ internal static partial class Tests {
     }
     private static Task Fault(string message){var completion=new TaskCompletionSource<bool>();completion.SetException(new IOException(message));return completion.Task;}
     private static void TestConnection(){
+        TestRecoveryConnection();
         foreach(string mode in new[]{"success","fallback","partial","failure","cancel","uac-cancel","probe-error","stop-error","report-error","confirmation-fails","manual"}){
             var starts=new List<int>();bool active=false,aborted=false;int selected=-1,calls=0;ConnectionOutcome outcome=null;Exception error=null;
             using(var cancellation=new CancellationTokenSource()){
@@ -113,6 +114,43 @@ internal static partial class Tests {
             if(mode=="cancel")Check("Connect cancellation stops before probe and fallback",error is OperationCanceledException&&calls==0&&starts.Count==1);
             if(mode=="uac-cancel")Check("UAC cancellation never prompts for other strategies",error is System.ComponentModel.Win32Exception&&starts.Count==1&&calls==0);
             if(mode=="confirmation-fails")Check("One transient successful probe cannot verify profile",outcome!=null&&!outcome.Verified);
+        }
+    }
+    private static void TestRecoveryConnection() {
+        foreach(int successAt in new[]{0,2,3}) {
+            DateTime now=new DateTime(2026,9,14,0,0,0,DateTimeKind.Utc);
+            var policy=new RecoveryPolicy();policy.Start(now,1);
+            for(int i=0;i<3;i++)policy.Observe(now,false);
+            bool connected=true,active=false;int attempts=0;
+            while(policy.BeginAttempt(now)) {
+                attempts++;bool succeeds=attempts==successAt;
+                var outcome=ConnectionFlow.Run(1,1,false,
+                    p=>{if(!connected)throw new IOException("SIMULATED lost worker");active=true;return Task.FromResult(true);},
+                    ()=>{active=false;return Task.FromResult(true);},()=>{connected=false;active=false;},
+                    ()=>Task.FromResult(new[]{new ProbeResult{Index=0,Ok=succeeds},new ProbeResult{Index=2,Ok=true}}),
+                    message=>{},(p,values)=>{},CancellationToken.None,true).GetAwaiter().GetResult();
+                policy.Finished(now,outcome.Verified);
+                Check("Recovery keeps worker between attempts "+successAt+"/"+attempts,connected&&active==outcome.Running);
+                if(outcome.Verified)break;
+                Check("Failed recovery stops filtering "+successAt+"/"+attempts,!active&&!outcome.Running);
+                Check("Failed recovery respects retry delay "+successAt+"/"+attempts,!policy.BeginAttempt(policy.RetryAt.AddMilliseconds(-1)));
+                now=policy.RetryAt;
+            }
+            Check("Recovery reaches scheduled outcome "+successAt,attempts==(successAt==0?3:successAt)&&policy.Paused==(successAt==0)&&active==(successAt!=0));
+            policy.Stop();Check("Manual stop prevents recovery after failed or successful attempts "+successAt,!policy.BeginAttempt(now.AddHours(1)));
+        }
+        foreach(string failure in new[]{"cancel","cancel-final-stop","stop-error"}) {
+            bool active=false,aborted=false;int stops=0;Exception error=null;
+            using(var cancellation=new CancellationTokenSource()) {
+                try {
+                    ConnectionFlow.Run(1,1,false,p=>{active=true;if(failure=="cancel")cancellation.Cancel();return Task.FromResult(true);},
+                        ()=>{if(failure=="stop-error")return Fault("SIMULATED missing STOP acknowledgement");active=false;stops++;if(failure=="cancel-final-stop"&&stops==Core.ProfileOrder(1).Length+1)cancellation.Cancel();return Task.FromResult(true);},
+                        ()=>{aborted=true;active=false;},()=>Task.FromResult(new[]{new ProbeResult{Index=0,Ok=false},new ProbeResult{Index=2,Ok=true}}),
+                        message=>{},(p,values)=>{},cancellation.Token,true).GetAwaiter().GetResult();
+                }catch(Exception ex){error=ex;}
+            }
+            Check("Recovery closes worker on "+failure,aborted&&!active&&error!=null);
+            if(failure=="cancel-final-stop")Check("Cancellation after final STOP does not retain worker",error is OperationCanceledException&&stops==Core.ProfileOrder(1).Length+1);
         }
     }
     private static void TestDiagnostics(string folder) {
@@ -183,6 +221,12 @@ internal static partial class Tests {
                         writer.WriteLine("START|99|3");Check("IPC rejects invalid profile before engine",ReadReply(reader).StartsWith("ERROR|"));
                         writer.WriteLine("START|0|0");Check("IPC rejects empty selection",ReadReply(reader).StartsWith("ERROR|"));
                         writer.WriteLine("STOP");Check("IPC repeated stop succeeds",ReadReply(reader)=="STOPPED");
+                        var failedRecovery=ConnectionFlow.Run(1,1,false,p=>Task.FromResult(true),
+                            ()=>{writer.WriteLine("STOP");if(ReadReply(reader)!="STOPPED")throw new IOException("STOP not acknowledged");return Task.FromResult(true);},
+                            ()=>pipe.Dispose(),()=>Task.FromResult(new[]{new ProbeResult{Index=0,Ok=false},new ProbeResult{Index=2,Ok=true}}),
+                            message=>{},(p,values)=>{},CancellationToken.None,true).GetAwaiter().GetResult();
+                        Check("Failed recovery retains actual worker pipe with filtering stopped",!failedRecovery.Running&&pipe.IsConnected&&!worker.HasExited);
+                        writer.WriteLine("STATUS");Check("Retained worker accepts commands for the next recovery attempt",ReadReply(reader)=="STOPPED");
                     }
                 }
                 Check("IPC EOF exits worker",worker.WaitForExit(5000));

@@ -7,7 +7,7 @@ internal sealed class ConnectionOutcome {internal bool Running,Verified;internal
 internal static class ConnectionFlow {
     internal static async Task<ConnectionOutcome> Run(int preferred,int mask,bool manual,Func<int,Task> start,
         Func<Task> stop,Action abort,Func<Task<ProbeResult[]>> probe,Action<string> log,
-        Action<int,ProbeResult[]> sample,CancellationToken token) {
+        Action<int,ProbeResult[]> sample,CancellationToken token,bool keepStoppedWorker=false) {
         bool keep=false;int best=-1,bestScore=0;
         try{
             foreach(int profile in manual?new[]{preferred}:Core.ProfileOrder(preferred)){
@@ -31,7 +31,10 @@ internal static class ConnectionFlow {
                 var values=await probe();sample(best,values);token.ThrowIfCancellationRequested();
                 if(Probes.ControlOk(values)&&Probes.Score(values,mask)>0){log("Часть сервисов недоступна. Профиль подключения оставлен включённым.");keep=true;return new ConnectionOutcome{Running=true,Verified=false,Profile=best,Results=values};}
             }
-            await stop();log("Рабочий профиль не подтверждён. Обход выключен.");return new ConnectionOutcome();
+            await stop();token.ThrowIfCancellationRequested();log("Рабочий профиль не подтверждён. Обход выключен.");
+            // Recovery reuses the elevated worker only after STOP was acknowledged.
+            // Cancellation and any failure to stop still close the pipe and its owned engine.
+            keep=keepStoppedWorker;return new ConnectionOutcome();
         }finally{if(!keep)abort();}
     }
 }

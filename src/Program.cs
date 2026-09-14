@@ -83,8 +83,6 @@ internal sealed partial class MainWindow {
         cancelDiagnostic.Click+=(s,e)=>{if(diagnosticCancellation!=null){diagnosticCancellation.Cancel();cancelDiagnostic.IsEnabled=false;diagnosticStatus.Text="Останавливаем проверку…";}};
         openReports.Click+=(s,e)=>{try{Directory.CreateDirectory(DiagnosticReport.Folder);Process.Start(new ProcessStartInfo(DiagnosticReport.Folder){UseShellExecute=true});}catch(Exception ex){diagnosticStatus.Text=ex.Message;}};
         for(int i=0;i<3;i++) { int value=i; profiles[i].Click+=(s,e)=>{manualProfile=true;profile=value;preferences.ManualProfile=value;PaintProfile();SavePreferences();}; }
-        youtube.Click+=(s,e)=>ServicesChanged(youtube);
-        discord.Click+=(s,e)=>ServicesChanged(discord);
         Window.SourceInitialized+=(s,e)=>{int dark=1; Native.DwmSetWindowAttribute(new WindowInteropHelper(Window).Handle,20,ref dark,4);};
         Window.Loaded+=(s,e)=> {
             try { Core.VerifyEngine(); Write("Сетевые компоненты найдены и совпадают с хешами сборки."); } catch(Exception ex) { Write(ex.Message); detail.Text=ex.Message; }
@@ -149,7 +147,8 @@ internal sealed partial class MainWindow {
         Find<FrameworkElement>("EnvironmentBanner").Visibility=Visibility.Collapsed;Write("Запущен профиль «"+Core.Names[profile]+"».");
     }
     private async Task Stop() {
-        if(bridge.Connected)await bridge.Send("STOP");running=false;state.Text="Отключено";detail.Text="Выберите сервисы для подключения.";Write("Сетевой компонент BlockMook остановлен.");UpdateEnvironment();
+        if(bridge.Connected&&await bridge.Send("STOP")!="STOPPED")throw new IOException("Сетевой компонент не подтвердил остановку");
+        running=false;state.Text="Отключено";detail.Text="Выберите сервисы для подключения.";Write("Сетевой компонент BlockMook остановлен.");UpdateEnvironment();
     }
     private async Task Toggle() {if(running)await Stop();else await ConnectAutomatically();}
     private async Task<ProbeResult[]> Check() {
@@ -174,7 +173,7 @@ internal sealed partial class MainWindow {
                 var outcome=await ConnectionFlow.Run(profile,Mask,manualProfile,
                     async chosen=>{profile=chosen;PaintProfile();await Start();},Stop,bridge.Dispose,
                     async()=>{var values=await Check();if(!bridge.Connected||await bridge.Send("STATUS")!="RUNNING")throw new IOException("Движок завершился во время проверки");return values;},
-                    message=>{report.Add(message);Write(message);},(chosen,values)=>report.Sample(Core.Names[chosen],values,Mask),cancellation.Token);
+                    message=>{report.Add(message);Write(message);},(chosen,values)=>report.Sample(Core.Names[chosen],values,Mask),cancellation.Token,recovering);
                 running=outcome.Running;
                 lastProvenMask=outcome.Results==null?0:Services.Selected(Mask).Where(service=>outcome.Results.Any(r=>r.Index==service.Index&&r.Ok)).Sum(service=>service.Bit);
                 lastConnectionHealthy=outcome.Results!=null&&(recovering?Probes.AllSelected(outcome.Results,recovery.ProvenMask):outcome.Verified);

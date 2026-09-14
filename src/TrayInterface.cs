@@ -40,7 +40,7 @@ internal sealed partial class MainWindow {
     private void SetupDesktop(){
         foreach(string id in new[]{"CloseToTray","AutoRecover","ReconnectOnChange","Notifications","AutoConnect"}){
             var control=Find<CheckBox>(id);control.IsChecked=id=="CloseToTray"?preferences.CloseToTray:id=="AutoRecover"?preferences.AutoRecover:id=="ReconnectOnChange"?preferences.ReconnectOnChange:id=="Notifications"?preferences.Notifications:preferences.AutoConnect;
-            control.Click+=(s,e)=>{
+            OnToggleChanged(control,()=>{
                 preferences.CloseToTray=Find<CheckBox>("CloseToTray").IsChecked==true;
                 preferences.AutoRecover=Find<CheckBox>("AutoRecover").IsChecked==true;
                 preferences.ReconnectOnChange=Find<CheckBox>("ReconnectOnChange").IsChecked==true;
@@ -48,14 +48,11 @@ internal sealed partial class MainWindow {
                 preferences.AutoConnect=Find<CheckBox>("AutoConnect").IsChecked==true;
                 if(!preferences.AutoRecover&&recovering){recovery.Stop();userStopRequested=true;if(connectionCancellation!=null)connectionCancellation.Cancel();}
                 SavePreferences();PaintDesktop();
-            };
+            });
         }
         try{Find<CheckBox>("LaunchAtLogin").IsChecked=!isSmoke&&DesktopIntegration.StartupEnabled();}
         catch(Exception ex){Find<CheckBox>("LaunchAtLogin").IsEnabled=false;Find<TextBlock>("DesktopStatus").Text="Не удалось прочитать автозапуск: "+ex.Message;}
-        Find<CheckBox>("LaunchAtLogin").Click+=(s,e)=>{
-            try{if(!isSmoke)DesktopIntegration.SetStartup(Find<CheckBox>("LaunchAtLogin").IsChecked==true);Find<TextBlock>("DesktopStatus").Text="Настройка автозапуска сохранена.";}
-            catch(Exception ex){Find<CheckBox>("LaunchAtLogin").IsChecked=!(Find<CheckBox>("LaunchAtLogin").IsChecked==true);Find<TextBlock>("DesktopStatus").Text=ex.Message;}
-        };
+        BindStartupToggle(Find<CheckBox>("LaunchAtLogin"),enabled=>{if(!isSmoke)DesktopIntegration.SetStartup(enabled);});
         Find<Button>("CreateShortcut").Click+=(s,e)=>{try{Find<TextBlock>("DesktopStatus").Text=isSmoke?"Тест: ярлык не создавался.":"Ярлык создан: "+DesktopIntegration.CreateShortcut(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));}catch(Exception ex){Find<TextBlock>("DesktopStatus").Text=ex.Message;}};
         Find<Button>("ExitApp").Click+=(s,e)=>RequestExit();
         Find<Button>("TrayNoticeHide").Click+=(s,e)=>{CancelCloseChoice();Window.Hide();};
@@ -79,6 +76,15 @@ internal sealed partial class MainWindow {
         NetworkChange.NetworkAddressChanged+=NetworkChanged;
         SystemEvents.PowerModeChanged+=PowerChanged;
         Application.Current.SessionEnding+=SessionEnding;
+    }
+    private void BindStartupToggle(CheckBox control,Action<bool> persist){
+        bool saved=control.IsChecked==true,updating=false;
+        OnToggleChanged(control,()=>{
+            if(updating)return;updating=true;
+            try{persist(control.IsChecked==true);saved=control.IsChecked==true;Find<TextBlock>("DesktopStatus").Text="Настройка автозапуска сохранена.";}
+            catch(Exception ex){control.IsChecked=saved;Find<TextBlock>("DesktopStatus").Text=ex.Message;}
+            finally{updating=false;}
+        });
     }
     private void Post(Action action){if(!closing&&!Window.Dispatcher.HasShutdownStarted)Window.Dispatcher.BeginInvoke(action);}
     private void NetworkChanged(object sender,EventArgs args){Post(()=>ConnectionEnvironmentChanged("Сеть изменилась. Проверим соединение."));}
@@ -143,10 +149,24 @@ internal sealed partial class MainWindow {
             busy=true;connectionCancellation=cancellation;recovery.Start(DateTime.UtcNow,3);UserToggle().GetAwaiter().GetResult();UiAssert(cancellation.IsCancellationRequested&&!recovery.Wanted&&userStopRequested,"manual disconnect cancels pending recovery");connectionCancellation=null;userStopRequested=false;busy=false;
         }
         Navigate("Settings");Find<ScrollViewer>("SettingsPage").ScrollToBottom();CaptureUi("-BackgroundSettings");
-        var autoConnect=Find<CheckBox>("AutoConnect");autoConnect.IsChecked=true;autoConnect.RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));UiAssert(preferences.AutoConnect,"auto-connect preference bound");autoConnect.IsChecked=false;autoConnect.RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));
+        foreach(string id in new[]{"CloseToTray","AutoConnect","AutoRecover","ReconnectOnChange","Notifications","ReduceMotion"}){
+            var control=Find<CheckBox>(id);bool before=control.IsChecked==true;
+            UiToggle(control);UiAssert(DesktopPreference(id)==!before,"automation updates preference "+id);
+            if(id=="AutoRecover")UiAssert(Find<CheckBox>("ReconnectOnChange").IsEnabled==preferences.AutoRecover,"automation updates recovery-dependent control");
+            UiToggle(control);UiAssert(DesktopPreference(id)==before,"automation restores preference "+id);
+        }
+        var startup=Find<CheckBox>("LaunchAtLogin");UiToggle(startup);UiAssert(Find<TextBlock>("DesktopStatus").Text=="Настройка автозапуска сохранена.","startup automation invokes persistence");UiToggle(startup);
+        int startupWrites=0;var failedStartup=new CheckBox{IsChecked=false};BindStartupToggle(failedStartup,enabled=>{startupWrites++;throw new IOException("Startup write failed");});
+        UiToggle(failedStartup);UiAssert(startupWrites==1&&failedStartup.IsChecked==false&&Find<TextBlock>("DesktopStatus").Text=="Startup write failed","startup failure restores saved value without recursive persistence");
+        using(var cancellation=new CancellationTokenSource()){
+            recovering=true;connectionCancellation=cancellation;recovery.Start(DateTime.UtcNow,3);UiToggle(Find<CheckBox>("AutoRecover"));
+            UiAssert(!preferences.AutoRecover&&!recovery.Wanted&&cancellation.IsCancellationRequested,"automation disabling recovery cancels active retry");
+            recovering=false;connectionCancellation=null;userStopRequested=false;UiToggle(Find<CheckBox>("AutoRecover"));
+        }
         UiClick("CreateShortcut");UiAssert(Find<TextBlock>("DesktopStatus").Text.StartsWith("Тест:"),"smoke never writes Desktop");
         Find<ScrollViewer>("SettingsPage").ScrollToTop();Navigate("Home");
     }
+    private bool DesktopPreference(string id){return id=="CloseToTray"?preferences.CloseToTray:id=="AutoConnect"?preferences.AutoConnect:id=="AutoRecover"?preferences.AutoRecover:id=="ReconnectOnChange"?preferences.ReconnectOnChange:id=="Notifications"?preferences.Notifications:preferences.ReduceMotion;}
     private void TestExitUi(){
         recovery.Start(DateTime.UtcNow,3);
         using(var cancellation=new CancellationTokenSource()){

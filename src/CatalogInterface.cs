@@ -13,8 +13,8 @@ internal sealed partial class MainWindow {
     private void SetupCatalog(){
         foreach(var service in Services.Items){
             var control=ServiceControl(service);control.IsChecked=(preferences.Services&service.Bit)!=0;control.ToolTip=service.Description;
-            if(service.Index>2)control.Click+=(s,e)=>ServicesChanged(control);
         }
+        foreach(var service in Services.Items){var control=ServiceControl(service);OnToggleChanged(control,()=>ServicesChanged(control));}
         PaintServices();
         Find<Button>("AddService").Click+=(s,e)=>ShowCatalog();
         Find<Button>("CatalogClose").Click+=(s,e)=>CloseCatalog();
@@ -53,7 +53,7 @@ internal sealed partial class MainWindow {
             text.Children.Add(new TextBlock{Text=service.Description,FontSize=12,Foreground=new SolidColorBrush(Color.FromRgb(166,169,175)),TextWrapping=TextWrapping.Wrap});
             var toggle=new CheckBox{Content=text,IsChecked=(catalogMask&service.Bit)!=0,Margin=new Thickness(0,0,8,0)};
             AutomationProperties.SetName(toggle,service.Name);AutomationProperties.SetAutomationId(toggle,"CatalogService"+service.Bit);
-            toggle.Click+=(s,e)=>{if(toggle.IsChecked==true)catalogMask|=definition.Bit;else catalogMask&=~definition.Bit;CatalogCount();};
+            OnToggleChanged(toggle,()=>{if(toggle.IsChecked==true)catalogMask|=definition.Bit;else catalogMask&=~definition.Bit;CatalogCount();});
             rows.Children.Add(new Border{Child=toggle,Padding=new Thickness(0,15,0,15),BorderThickness=new Thickness(0,0,0,1),BorderBrush=new SolidColorBrush(Color.FromRgb(48,49,53))});
         }
         if(rows.Children.Count==0)rows.Children.Add(new TextBlock{Text="Такого сервиса пока нет в каталоге.",Margin=new Thickness(0,22,0,22),Foreground=Brushes.LightGray});
@@ -61,7 +61,9 @@ internal sealed partial class MainWindow {
     }
     private void ApplyCatalog(){
         if(!Services.ValidMask(catalogMask)||busy||running||recovery.Wanted)return;
-        foreach(var service in Services.Items)ServiceControl(service).IsChecked=(catalogMask&service.Bit)!=0;
+        changingServices=true;
+        try{foreach(var service in Services.Items)ServiceControl(service).IsChecked=(catalogMask&service.Bit)!=0;}
+        finally{changingServices=false;}
         preferences.Services=Mask;if(!manualProfile){profile=Core.LoadProfile(Mask);PaintProfile();}
         SavePreferences();PaintServices();ResetChecks();CloseCatalog();
     }
@@ -72,14 +74,18 @@ internal sealed partial class MainWindow {
         ShowCatalog();UiAssert(!Find<Grid>("AppContent").IsEnabled,"catalog modal");CaptureUi("-Catalog");
         Find<TextBox>("CatalogSearch").Text="meet";UiAssert(Find<StackPanel>("CatalogRows").Children.Count==1,"catalog search");
         var row=(Border)Find<StackPanel>("CatalogRows").Children[0];var toggle=(CheckBox)row.Child;
-        toggle.IsChecked=true;toggle.RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));
+        UiToggle(toggle);UiAssert((catalogMask&16)!=0,"catalog automation updates draft without click");
         Find<TextBox>("CatalogSearch").Text="absent-service";UiAssert(Find<StackPanel>("CatalogRows").Children[0] is TextBlock,"empty search");
         Find<TextBox>("CatalogSearch").Text="";UiAssert((catalogMask&16)!=0,"selection survives filtering");
         UiClick("CatalogClose");UiAssert((Mask&16)==0,"cancel does not save draft");
         ShowCatalog();catalogMask=0;CatalogCount();UiAssert(!Find<Button>("CatalogApply").IsEnabled,"empty selection blocked");ApplyCatalog();UiAssert(Mask!=0,"apply guard");
         catalogMask=31;ApplyCatalog();UiAssert(Mask==31&&preferences.Services==31&&Find<Grid>("AppContent").IsEnabled,"all services saved");
         UiAssert(Find<FrameworkElement>("ProbeCard5").Visibility==Visibility.Visible,"Meet result shown");CaptureUi("-AllServices");
-        ShowCatalog();Find<TextBox>("CatalogSearch").Text="meet";CaptureUi("-Meet");catalogMask=3;ApplyCatalog();
+        UiToggle(Find<CheckBox>("Meet"));UiAssert(Mask==15&&preferences.Services==15,"home automation updates optional service");
+        ShowCatalog();Find<TextBox>("CatalogSearch").Text="meet";CaptureUi("-Meet");catalogMask=16;ApplyCatalog();
+        UiAssert(Mask==16&&preferences.Services==16,"catalog replaces selection without retaining an intermediate last service");
+        UiToggle(Find<CheckBox>("Meet"));UiAssert(Mask==16&&Find<CheckBox>("Meet").IsChecked==true,"home automation retains last service");
+        ShowCatalog();catalogMask=3;ApplyCatalog();
     }
 }
 }

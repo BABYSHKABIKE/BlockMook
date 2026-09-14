@@ -11,6 +11,9 @@ internal static partial class Tests {
     private static string ReleaseFixture() {
         return "{\"draft\":false,\"prerelease\":false,\"tag_name\":\"v1.2.3\",\"body\":\"TEST FIXTURE release notes\",\"assets\":[{\"name\":\""+Updates.AssetName+"\",\"state\":\"uploaded\",\"size\":123,\"digest\":\"sha256:"+new string('a',64)+"\",\"browser_download_url\":\""+Updates.RepoUrl+"/releases/download/v1.2.3/"+Updates.AssetName+"\"}]}";
     }
+    private static string BuildFixture(string fixture,string marker) {
+        return fixture.Replace("TEST FIXTURE release notes","TEST FIXTURE release notes "+marker);
+    }
     private static void TestUpdates(string folder) {
         string fixture=ReleaseFixture();var info=Updates.Parse(fixture);
         Check("Release reads version, notes and exact Windows archive",info.Version==new Version(1,2,3)&&info.Size==123&&info.Notes.StartsWith("TEST FIXTURE"));
@@ -19,6 +22,26 @@ internal static partial class Tests {
         var current=Updates.Parse(fixture.Replace("v1.2.3","v1.0"));
         Check("Public 1.0 tag normalizes version and retains exact download path",current.Version==new Version(1,0,0)&&current.Tag=="v1.0"&&current.Url.EndsWith("/v1.0/"+Updates.AssetName));
         Check("Future 1.1 is newer than consolidated 1.0",Updates.ReadVersion("v1.1")>Updates.Installed);
+        string marker="<!-- blockmook-build: 4; sha256: "+new string('a',64)+" -->";
+        var revision=Updates.Parse(BuildFixture(fixture.Replace("v1.2.3","v1.0"),marker));
+        Check("Same-version newer build is offered as an update",Updates.Availability(revision,new Version(1,0,0),3)==UpdateAvailability.NewBuild&&Updates.CanDownload(Updates.Availability(revision,new Version(1,0,0),3)));
+        Check("Same-version identical build is current",Updates.Availability(revision,new Version(1,0,0),4)==UpdateAvailability.Current);
+        Check("Older same-version archive is not offered to a newer installed build",Updates.Availability(revision,new Version(1,0,0),5)==UpdateAvailability.Older&&!Updates.CanDownload(Updates.Availability(revision,new Version(1,0,0),5)));
+        Check("A higher build number cannot override an older product version",Updates.Availability(revision,new Version(1,1,0),1)==UpdateAvailability.Older);
+        Check("New product version remains available without build metadata",Updates.Availability(info,new Version(1,0,0),999)==UpdateAvailability.NewVersion&&Updates.CanDownload(Updates.Availability(info,new Version(1,0,0),999)));
+        Check("Legacy same-version release is unknown instead of incorrectly current",Updates.Availability(current,new Version(1,0,0),1)==UpdateAvailability.Unknown&&!Updates.CanDownload(Updates.Availability(current,new Version(1,0,0),1)));
+        Check("Unknown build status does not claim current software",!Updates.AvailabilityText(UpdateAvailability.Unknown,current).Contains("актуальная"));
+        Check("Release notes hide machine metadata but keep human text",revision.Notes=="TEST FIXTURE release notes"&&revision.BuildNumber==4);
+        Check("Build metadata accepts uppercase checksum",Updates.Parse(BuildFixture(fixture,marker.Replace(new string('a',64),new string('A',64)))).BuildNumber==4);
+        foreach(string invalidMarker in new[]{marker.Replace("build: 4","build: 0"),marker.Replace("build: 4","build: -1"),marker.Replace("build: 4","build: 04"),marker.Replace("build: 4","build: 2147483648"),marker.Replace("build: 4","build: invalid"),marker.Replace(new string('a',64),"bad"),marker.Replace(" -->",""),marker+" "+marker,marker.Replace(new string('a',64),new string('b',64))})
+            Check("Reject malformed, duplicate or unbound build metadata "+invalidMarker.Substring(0,Math.Min(50,invalidMarker.Length)),Rejected(()=>Updates.Parse(BuildFixture(fixture,invalidMarker))));
+        string longNotes=BuildFixture(fixture,marker).Replace("TEST FIXTURE release notes",new string('x',17000));
+        var longRelease=Updates.Parse(longNotes);
+        Check("Build metadata is verified before notes are truncated",longRelease.BuildNumber==4&&longRelease.Notes.Length==16001&&!longRelease.Notes.Contains("blockmook-build"));
+        Check("The compiled executable carries the internal build number",System.Diagnostics.FileVersionInfo.GetVersionInfo(System.Reflection.Assembly.GetExecutingAssembly().Location).ProductVersion==Updates.CurrentVersion+"+build."+Updates.CurrentBuild);
+        Check("Download rejects unknown same-version build before using network",Rejected(()=>Updates.Download(current,null,CancellationToken.None).GetAwaiter().GetResult()));
+        var oldRelease=Updates.Parse(fixture.Replace("v1.2.3","v0.9.0"));
+        Check("Download rejects older product release before using network",Rejected(()=>Updates.Download(oldRelease,null,CancellationToken.None).GetAwaiter().GetResult()));
         foreach(var pair in new[]{
             new[]{"\"draft\":false","\"draft\":true"},new[]{"\"prerelease\":false","\"prerelease\":true"},
             new[]{Updates.RepoUrl,"https://github.com/foreign/BlockMook"},new[]{"https://github.com/","http://github.com/"},

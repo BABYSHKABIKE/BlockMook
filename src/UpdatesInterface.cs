@@ -44,11 +44,11 @@ internal sealed partial class MainWindow {
                     availableRelease=null;Find<Button>("DownloadUpdate").Visibility=Visibility.Collapsed;status.Text="Проверка обновлений…";
                     availableRelease=await Updates.Latest(cancellation.Token);
                     if(availableRelease==null){status.Text="Публичных релизов пока нет.";return;}
-                    bool newer=availableRelease.Version>Updates.Installed;
-                    status.Text=newer?"Доступна версия "+availableRelease.Version.ToString(3):Updates.DevelopmentBuild?"Новых выпусков нет. Установлена сборка для разработки.":"Установлена актуальная версия.";
-                    if(newer||!Updates.DevelopmentBuild)Find<TextBlock>("ReleaseNotes").Text=availableRelease.Notes;
-                    Find<Button>("DownloadUpdate").Content=newer?"Скачать "+availableRelease.Version.ToString(3):"Скачать эту версию";
-                    Find<Button>("DownloadUpdate").Visibility=(newer||!Updates.DevelopmentBuild&&availableRelease.Version==Updates.Installed)?Visibility.Visible:Visibility.Collapsed;
+                    var availability=Updates.Availability(availableRelease,Updates.Installed,Updates.InstalledBuild);
+                    status.Text=Updates.AvailabilityText(availability,availableRelease);
+                    Find<TextBlock>("ReleaseNotes").Text=availableRelease.Notes;
+                    Find<Button>("DownloadUpdate").Content=availability==UpdateAvailability.Current?"Скачать эту сборку":"Скачать обновление";
+                    Find<Button>("DownloadUpdate").Visibility=Updates.CanDownload(availability)?Visibility.Visible:Visibility.Collapsed;
                 }
             } catch(OperationCanceledException){status.Text="Операция отменена или время ожидания истекло. Можно повторить.";}
             catch(Exception ex){status.Text=ex is HttpRequestException?"Не удалось связаться с GitHub. Проверьте подключение к интернету и повторите попытку.":ex.Message;Write("Обновления: "+ex.Message);}

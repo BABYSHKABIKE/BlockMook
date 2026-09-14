@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -12,6 +14,7 @@ internal sealed partial class MainWindow {
     private Preferences preferences;
     private bool isSmoke;
     private int welcomeStep;
+    private bool changingServices;
     private readonly string[] pageNames={"Home","Diagnostics","Network","Updates","Settings","Help"};
     private void SetupUi(bool smoke) {
         isSmoke=smoke;preferences=smoke?new Preferences():Preferences.LoadUser();
@@ -21,13 +24,11 @@ internal sealed partial class MainWindow {
         SetupCatalog();
         Find<CheckBox>("ReduceMotion").IsChecked=preferences.ReduceMotion;
         foreach(string name in pageNames){string selected=name;Find<Button>("Nav"+name).Click+=(s,e)=>Navigate(selected);}
-        Find<CheckBox>("ReduceMotion").Click+=(s,e)=>{preferences.ReduceMotion=Find<CheckBox>("ReduceMotion").IsChecked==true;SavePreferences();};
+        OnToggleChanged(Find<CheckBox>("ReduceMotion"),()=>{preferences.ReduceMotion=Find<CheckBox>("ReduceMotion").IsChecked==true;SavePreferences();});
         Find<Button>("ShowWelcome").Click+=(s,e)=>ShowWelcome();
         Find<Button>("WelcomeSkip").Click+=(s,e)=>DismissWelcome();
         Find<Button>("WelcomeNext").Click+=(s,e)=>{if(welcomeStep==2)DismissWelcome();else{welcomeStep++;PaintWelcome();}};
         Find<Button>("WelcomeBack").Click+=(s,e)=>{if(welcomeStep>0)welcomeStep--;PaintWelcome();};
-        Find<CheckBox>("WelcomeYouTube").Click+=(s,e)=>ServicesChanged(youtube);
-        Find<CheckBox>("WelcomeDiscord").Click+=(s,e)=>ServicesChanged(discord);
         Window.PreviewKeyDown+=(s,e)=>{if(e.Key==Key.Escape&&Find<Grid>("TrayNotice").Visibility==Visibility.Visible){CancelCloseChoice();e.Handled=true;}else if(e.Key==Key.Escape&&Find<FrameworkElement>("Welcome").Visibility==Visibility.Visible){DismissWelcome();e.Handled=true;}};
         Navigate("Home");
     }
@@ -35,11 +36,18 @@ internal sealed partial class MainWindow {
         if(isSmoke)return;
         try {preferences.Save(Preferences.DefaultPath);}catch(Exception ex){Write("Не удалось сохранить настройки: "+ex.Message);detail.Text="Настройки не сохранились. Подробности — в журнале раздела «О приложении».";}
     }
+    private static void OnToggleChanged(CheckBox control,Action changed) {
+        RoutedEventHandler handler=(s,e)=>changed();control.Checked+=handler;control.Unchecked+=handler;
+    }
     private void ServicesChanged(CheckBox changed) {
-        if(Mask==0){changed.IsChecked=true;detail.Text="Необходимо выбрать хотя бы один сервис.";}
-        preferences.Services=Mask;PaintServices();ResetChecks();
-        if(!manualProfile){profile=Core.LoadProfile(Mask);PaintProfile();}
-        SavePreferences();
+        if(changingServices)return;
+        changingServices=true;
+        try {
+            if(Mask==0){changed.IsChecked=true;detail.Text="Необходимо выбрать хотя бы один сервис.";}
+            preferences.Services=Mask;PaintServices();ResetChecks();
+            if(!manualProfile){profile=Core.LoadProfile(Mask);PaintProfile();}
+            SavePreferences();
+        } finally {changingServices=false;}
     }
     private void Navigate(string name) {
         networkPageVisible=name=="Network";UpdateNetworkTimer();
@@ -74,13 +82,17 @@ internal sealed partial class MainWindow {
     }
     private void UiAssert(bool value,string name) {if(!value)throw new Exception("UI regression: "+name);}
     private void UiClick(string name) {Find<Button>(name).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));}
+    private void UiToggle(CheckBox control) {
+        var provider=(IToggleProvider)new CheckBoxAutomationPeer(control).GetPattern(PatternInterface.Toggle);
+        UiAssert(provider!=null,"toggle automation provider");provider.Toggle();
+    }
     private void RunUiSmoke() {
         foreach(string name in pageNames){UiClick("Nav"+name);UiAssert(Find<FrameworkElement>(name+"Page").Visibility==Visibility.Visible,"navigation "+name);CaptureUi("-"+name);}
         Navigate("Settings");Find<Expander>("ManualExpander").IsExpanded=true;CaptureUi("-Manual");UiClick("Profile2");UiAssert(manualProfile&&profile==2&&preferences.ManualProfile==2,"manual profile selection");UiClick("Auto");UiAssert(!manualProfile&&preferences.ManualProfile==-1,"automatic profile selection");Find<Expander>("ManualExpander").IsExpanded=false;
         UiClick("ShowWelcome");UiAssert(!Find<FrameworkElement>("AppContent").IsEnabled,"modal disables background");CaptureUi("-Welcome");
         UiClick("WelcomeNext");UiAssert(Find<FrameworkElement>("WelcomeServices").Visibility==Visibility.Visible,"service step");
-        Find<CheckBox>("WelcomeDiscord").IsChecked=false;Find<CheckBox>("WelcomeDiscord").RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));UiAssert(Mask==1,"onboarding service binding");
-        Find<CheckBox>("WelcomeYouTube").IsChecked=false;Find<CheckBox>("WelcomeYouTube").RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));UiAssert(Mask==1&&Find<CheckBox>("WelcomeYouTube").IsChecked==true,"last service retained");
+        UiToggle(Find<CheckBox>("WelcomeDiscord"));UiAssert(Mask==1&&preferences.Services==1,"onboarding automation updates selected services");
+        UiToggle(Find<CheckBox>("WelcomeYouTube"));UiAssert(Mask==1&&preferences.Services==1&&Find<CheckBox>("WelcomeYouTube").IsChecked==true,"onboarding automation retains last service and checked state");
         UiClick("WelcomeBack");UiAssert(welcomeStep==0,"back");UiClick("WelcomeSkip");UiAssert(Find<FrameworkElement>("Welcome").Visibility==Visibility.Collapsed&&Find<FrameworkElement>("AppContent").IsEnabled&&preferences.WelcomeDone,"skip closes and completes");
         UiClick("ShowWelcome");UiClick("WelcomeNext");UiClick("WelcomeNext");UiClick("WelcomeNext");UiAssert(Find<FrameworkElement>("Welcome").Visibility==Visibility.Collapsed,"finish closes");
         youtube.IsChecked=discord.IsChecked=true;preferences.Services=3;detail.Text="Выберите сервисы и нажмите «Подключить».";
